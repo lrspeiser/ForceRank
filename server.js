@@ -125,10 +125,17 @@ io.on('connection', (socket) => {
                         });
                     }
 
-                    const finalResults = Object.entries(finalScores)
+                    console.log(`[server.js] Final Scores: ${JSON.stringify(finalScores)}`);
+
+                    const sortedResults = Object.entries(finalScores)
                         .map(([name, score]) => ({ name, score }))
-                        .sort((a, b) => a.score - b.score)
-                        .map((item, index) => ({ ...item, rank: index + 1 }));
+                        .sort((a, b) => a.score - b.score);
+
+                    const highestScore = sortedResults[0].score;
+                    const finalResults = sortedResults.map((item) => ({
+                        ...item,
+                        rank: item.score === highestScore ? 'Tied for 1' : `Rank ${sortedResults.indexOf(item) + 1}`
+                    }));
 
                     io.to(gameCode).emit('displayFinalResults', { finalResults });
                 }
