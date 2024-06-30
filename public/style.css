@@ -1,0 +1,49 @@
+body {
+  font-family: Arial, sans-serif;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  height: 100vh;
+  margin: 0;
+}
+
+#start, #createGame, #joinGame, #waitingRoom, #game, #result {
+  display: none;
+  flex-direction: column;
+  align-items: center;
+}
+
+#start {
+  display: flex;
+}
+
+#dragContainer {
+  margin: 20px;
+}
+
+#sortable {
+  list-style-type: none;
+  padding: 0;
+}
+
+#sortable li {
+  margin: 10px;
+  padding: 10px;
+  border: 1px solid #ddd;
+  background-color: #f9f9f9;
+  cursor: grab;
+}
+
+#sortable li.dragging {
+  background-color: #e0e0e0;
+}
+
+#playersList, #finalResults {
+  list-style-type: none;
+  padding: 0;
+}
+
+#playersList li, #finalResults li {
+  margin: 5px 0;
+}
