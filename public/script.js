@@ -132,6 +132,9 @@ socket.on('startGame', (data) => {
         rank: index + 1
     }));
 
+    topLabel.textContent = 'Dirty';
+    bottomLabel.textContent = 'Clean';
+
     sortableList.innerHTML = '';
     rankings.forEach(({ name }) => {
         const li = document.createElement('li');
@@ -180,7 +183,7 @@ socket.on('displayFinalResults', (data) => {
     finalResultsList.innerHTML = '';
     data.finalResults.forEach(result => {
         const li = document.createElement('li');
-        li.textContent = `${result.name} (Rank: ${result.rank})`;
+        li.textContent = `${result.name} (${result.rank})`;
         finalResultsList.appendChild(li);
     });
 });
