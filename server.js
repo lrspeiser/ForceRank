@@ -1,218 +1,149 @@
-const express = require("express");
-const http = require("http");
-const socketIo = require("socket.io");
-const path = require("path");
-const admin = require("firebase-admin");
+// server.js - do not remove this header or any of the log statements within
 
+console.log("[server.js] Requiring express module");
+const express = require("express"); // Express framework for building web applications
+console.log("[server.js] Requiring http module");
+const http = require("http"); // Node.js module for creating an HTTP server
+console.log("[server.js] Requiring socket.io module");
+const socketIo = require("socket.io"); // Socket.io for real-time communication
+console.log("[server.js] Requiring path module");
+const path = require("path"); // Node.js module for working with file and directory paths
+console.log("[server.js] Requiring firebase-admin module");
+const admin = require("firebase-admin"); // Firebase Admin SDK for accessing Firebase services
+
+// Parse the Firebase service account key from environment variables
+console.log("[server.js] Parsing Firebase service account key");
 const serviceAccount = JSON.parse(process.env.SERVICE_ACCOUNT_KEY);
 
-admin.initializeApp({
-    credential: admin.credential.cert(serviceAccount),
-    databaseURL: "https://slider-3b16e-default-rtdb.firebaseio.com",
-});
+// Initialize the Firebase Admin SDK with the service account credentials and database URL
+console.log("[server.js] Initializing Firebase Admin SDK");
+try {
+    admin.initializeApp({
+        credential: admin.credential.cert(serviceAccount),
+        databaseURL: "https://slider-3b16e-default-rtdb.firebaseio.com",
+    });
+    console.log("[server.js] Firebase Admin SDK initialized successfully");
+} catch (error) {
+    console.error("[server.js] Error initializing Firebase Admin SDK:", error);
+}
 
+// Create an instance of an Express application
+console.log("[server.js] Creating Express application instance");
 const app = express();
+// Create an HTTP server using the Express application
+console.log("[server.js] Creating HTTP server");
 const server = http.createServer(app);
+// Create a new instance of socket.io by passing the HTTP server
+console.log("[server.js] Initializing socket.io instance");
 const io = socketIo(server);
 
+// Define the port number on which the server will listen
+console.log("[server.js] Defining server port");
 const PORT = process.env.PORT || 3000;
 
+// Middleware to serve static files from the "public" directory
+console.log(
+    "[server.js] Setting up middleware to serve static files from 'public' directory",
+);
 app.use(express.static(path.join(__dirname, "public")));
 
+// Middleware to parse JSON bodies
+app.use(express.json());
+
+// Import game-related event handlers from external modules
+console.log(
+    "[server.js] Importing game-related event handlers from external modules",
+);
+const {
+    handleCreateGame, // Function to handle game creation
+    handleJoinGame, // Function to handle joining a game
+    handleGameExists, // Function to check if a game exists
+} = require("./validation"); // Import from validation.js
+const {
+    handleStartGame, // Function to handle starting a game
+    handleUpdateRankings, // Function to handle updating rankings
+    handleSubmitRankings, // Function to handle submitting rankings
+    handleNextRanking, // Function to handle moving to the next ranking round
+    handleRejoinGame, // Function to handle rejoining a game
+    handleLockRankings,
+} = require("./gameplay"); // Import from gameplay.js
+
+// Set up a connection event listener for socket.io
+console.log("[server.js] Setting up socket.io connection event listener");
 io.on("connection", (socket) => {
+    // Log a message when a user connects
     console.log("[server.js/io.on(connection)] A user connected");
 
-    socket.on("createGame", ({ gameCode, names, userId }) => {
-        console.log(`[server.js/socket.on('createGame')] Game code: ${gameCode}, Names: ${names.join(", ")}, UUID: ${userId}`);
+    // Attach event handlers for game-related actions
+    console.log("[server.js] Attaching game-related event handlers");
+    handleCreateGame(socket, io); // Attach the create game handler
+    handleJoinGame(socket, io); // Attach the join game handler
+    handleGameExists(socket, io); // Attach the check game exists handler
+    handleStartGame(socket, io); // Attach the start game handler
+    handleUpdateRankings(socket, io); // Attach the update rankings handler
+    handleSubmitRankings(socket, io); // Attach the submit rankings handler
+    handleNextRanking(socket, io); // Attach the next ranking handler
+    handleRejoinGame(socket, io); // Attach the rejoin game handler
+    handleLockRankings(socket, io); // Attach the lock rankings handler
 
-        const db = admin.database();
-        const gameRef = db.ref(`games/${gameCode}`);
-        gameRef.set({ names, creator: userId, playersCount: 1, completed: 0, version: 0, state: "waiting" });
-
-        socket.join(gameCode);
-        io.to(gameCode).emit("gameJoined", { gameCode, names });
-    });
-
-    socket.on("joinGame", ({ gameCode, userId }) => {
-        console.log(`[server.js/socket.on('joinGame')] Game code: ${gameCode}, UUID: ${userId}`);
-
-        const db = admin.database();
-        const gameRef = db.ref(`games/${gameCode}`);
-        gameRef.once("value", (snapshot) => {
-            const gameData = snapshot.val() || {};
-            gameRef.child("playersCount").transaction((count) => (count || 0) + 1);
-            socket.join(gameCode);
-            io.to(gameCode).emit("playerJoined", { userId, names: gameData.names });
-
-            if (gameData.state === "waiting") {
-                gameRef.child("state").set("voting");
-                console.log(`[server.js/joinGame] Game state set to voting for game code: ${gameCode}`);
-
-                const version = gameData.version || 0;
-                const rankingsRef = db.ref('rankings');
-                rankingsRef.once("value", (rankingsSnapshot) => {
-                    const allRankings = rankingsSnapshot.val() || [];
-                    const rankingCriteria = allRankings[version];
-                    io.to(gameCode).emit("startGame", { gameCode, names: gameData.names, rankingCriteria });
-                });
-            }
-        });
-    });
-
-    socket.on("checkGameExists", ({ gameCode, userId }) => {
-        console.log(`[server.js/socket.on('checkGameExists')] Checking if game code ${gameCode} exists`);
-
-        const db = admin.database();
-        const gameRef = db.ref(`games/${gameCode}`);
-
-        gameRef.once("value", (snapshot) => {
-            const exists = snapshot.exists();
-            let userExists = false;
-            if (exists) {
-                const players = snapshot.child("players").val() || {};
-                userExists = players.hasOwnProperty(userId);
-            }
-            socket.emit("gameExists", { exists, userExists, gameCode, userId });
-        });
-    });
-
-    socket.on("startGame", ({ gameCode }) => {
-        console.log(`[server.js/socket.on('startGame')] Starting game for game code: ${gameCode}`);
-
-        const db = admin.database();
-        const gameRef = db.ref(`games/${gameCode}`);
-
-        gameRef.once("value", (gameSnapshot) => {
-            const gameData = gameSnapshot.val() || {};
-            const version = gameData.version || 0;
-
-            const rankingsRef = db.ref('rankings');
-            rankingsRef.once("value", (rankingsSnapshot) => {
-                const allRankings = rankingsSnapshot.val() || [];
-                const rankingCriteria = allRankings[version];
-
-                const initialRankings = gameData.names.map((name, index) => ({
-                    name,
-                    rank: index + 1,
-                }));
-
-                for (const playerId of Object.keys(gameData.players || {})) {
-                    db.ref(`games/${gameCode}/rankings/${playerId}`).set(initialRankings);
-                }
-
-                gameRef.child("state").set("voting");
-                console.log(`[server.js/startGame] Game state set to voting for game code: ${gameCode}`);
-                io.to(gameCode).emit("startGame", { gameCode, names: gameData.names, rankingCriteria });
-            });
-        });
-    });
-
-    socket.on("updateRankings", ({ gameCode, userId, rankings }) => {
-        console.log(`[server.js/socket.on('updateRankings')] Game code: ${gameCode}, User ID: ${userId}, Rankings: ${JSON.stringify(rankings)}`);
-
-        const db = admin.database();
-        const userRankingsRef = db.ref(`games/${gameCode}/rankings/${userId}`);
-
-        userRankingsRef.set(rankings);
-    });
-
-    socket.on("submitRankings", ({ gameCode, userId, rankings }) => {
-        console.log(`[server.js/socket.on('submitRankings')] Game code: ${gameCode}, User ID: ${userId}, Rankings: ${JSON.stringify(rankings)}`);
-
-        const db = admin.database();
-        const gameRef = db.ref(`games/${gameCode}`);
-        const userRankingsRef = gameRef.child(`rankings/${userId}`);
-        const completedRef = gameRef.child("completed");
-
-        userRankingsRef.set(rankings);
-
-        completedRef.transaction((current) => (current || 0) + 1);
-
-        gameRef.once("value", (snapshot) => {
-            const gameData = snapshot.val();
-            const playerCount = gameData.playersCount;
-            completedRef.once("value", (compSnap) => {
-                if (compSnap.val() === playerCount) {
-                    const allRankings = gameData.rankings;
-                    const finalScores = {};
-
-                    for (const userRankings of Object.values(allRankings)) {
-                        userRankings.forEach(({ name, rank }) => {
-                            if (!finalScores[name]) {
-                                finalScores[name] = 0;
-                            }
-                            finalScores[name] += rank;
-                        });
-                    }
-
-                    console.log(`[server.js] Final Scores: ${JSON.stringify(finalScores)}`);
-
-                    const sortedResults = Object.entries(finalScores)
-                        .map(([name, score]) => ({ name, score }))
-                        .sort((a, b) => a.score - b.score);
-
-                    const highestScore = sortedResults[0].score;
-                    const finalResults = sortedResults.map((item, index) => ({
-                        ...item,
-                        rank: index === 0 ? `Rank 1` : `Rank ${index + 1}`,
-                    }));
-
-                    // Clear user rankings
-                    for (const playerId of Object.keys(gameData.rankings)) {
-                        db.ref(`games/${gameCode}/rankings/${playerId}`).remove();
-                    }
-
-                    // Reset completed count
-                    gameRef.child("completed").set(0);
-                    gameRef.child("state").set("waiting");
-                    console.log(`[server.js/submitRankings] Game state set to waiting for game code: ${gameCode}`);
-
-                    io.to(gameCode).emit("displayFinalResults", { finalResults, rankingCriteria: gameData.rankingCriteria });
-                }
-            });
-        });
-    });
-
-    socket.on("nextRanking", ({ gameCode }) => {
-        console.log(`[server.js/socket.on('nextRanking')] Next ranking for game code: ${gameCode}`);
-
-        const db = admin.database();
-        const gameRef = db.ref(`games/${gameCode}`);
-
-        gameRef.once("value", (snapshot) => {
-            const gameData = snapshot.val() || {};
-            const newVersion = (gameData.version || 0) + 1;
-
-            gameRef.child("version").set(newVersion);
-            gameRef.child("completed").set(0);
-            gameRef.child("rankings").remove();
-
-            const rankingsRef = db.ref('rankings');
-            rankingsRef.once("value", (rankingsSnapshot) => {
-                const allRankings = rankingsSnapshot.val() || [];
-                const rankingCriteria = allRankings[newVersion];
-                const names = gameData.names;
-                const initialRankings = names.map((name, index) => ({
-                    name,
-                    rank: index + 1,
-                }));
-
-                for (const playerId of Object.keys(gameData.players || {})) {
-                    db.ref(`games/${gameCode}/rankings/${playerId}`).set(initialRankings);
-                }
-
-                gameRef.child("state").set("voting");
-                console.log(`[server.js/nextRanking] Game state set to voting for game code: ${gameCode}`);
-                io.to(gameCode).emit("refreshRanking", { names, rankingCriteria });
-            });
-        });
-    });
-
+    // Set up a disconnect event listener for socket.io
+    console.log("[server.js] Setting up socket.io disconnect event listener");
     socket.on("disconnect", () => {
+        // Log a message when a user disconnects
         console.log("[server.js/io.on(disconnect)] A user disconnected");
     });
 });
 
+// Endpoint to write user UUID to Firebase
+app.post("/writeUser", (req, res) => {
+    const userId = req.body.userId;
+    console.log(`[server.js] Writing user to Firebase: ${userId}`);
+
+    admin
+        .database()
+        .ref("users/" + userId)
+        .set({ userId: userId })
+        .then(() => {
+            console.log(
+                `[server.js] Successfully wrote user to Firebase: ${userId}`,
+            );
+            res.status(200).send("User written to Firebase");
+        })
+        .catch((error) => {
+            console.error(
+                `[server.js] Error writing user to Firebase: ${error}`,
+            );
+            res.status(500).send("Error writing user to Firebase");
+        });
+});
+
+// Endpoint to log button click
+app.post("/logClick", (req, res) => {
+    console.log("[server.js] Received logClick request");
+
+    const { userId, buttonId } = req.body;
+    const timestamp = new Date().toISOString();
+    console.log(
+        `[server.js] Logging click: userId=${userId}, buttonId=${buttonId}, timestamp=${timestamp}`,
+    );
+
+    admin
+        .database()
+        .ref("logs/buttonClicks")
+        .push({ userId, buttonId, timestamp })
+        .then(() => {
+            console.log(`[server.js] Click logged successfully`);
+            res.status(200).send("Click logged successfully");
+        })
+        .catch((error) => {
+            console.error(`[server.js] Error logging click: ${error}`);
+            res.status(500).send("Error logging click");
+        });
+});
+
+// Start the HTTP server and listen on the specified port
+console.log("[server.js] Starting HTTP server");
 server.listen(PORT, () => {
+    // Log a message when the server starts successfully
     console.log(`[server.js/server.listen] Server running on port ${PORT}`);
 });

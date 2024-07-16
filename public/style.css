@@ -1,7 +1,5 @@
-@import url('https://fonts.googleapis.com/css2?family=Fredoka+One&family=Bangers&family=Open+Sans&display=swap');
-
 body {
-  font-family: 'Fredoka One', Arial, sans-serif;
+  font-family: 'Orbitron', Arial, sans-serif;
   background-color: #4B0082; /* Dark purple background */
   color: #FFFFFF; /* White text */
   display: flex;
@@ -10,6 +8,7 @@ body {
   justify-content: center;
   height: 100vh;
   margin: 0;
+  text-align: center;
 }
 
 #start, #createGame, #joinGame, #waitingRoom, #game, #result {
@@ -71,10 +70,23 @@ body {
   border-radius: 5px;
 }
 
+#invitationText {
+  width: 80%;
+  height: 60px;
+  padding: 10px;
+  margin: 10px 0;
+  border: 2px solid #FFD700;
+  background-color: #6A0DAD;
+  color: #FFFFFF;
+  font-family: 'Open Sans', sans-serif;
+  border-radius: 5px;
+  resize: none;
+}
+
 button {
   background-color: #FFD700; /* Gold background */
   color: #4B0082; /* Dark purple text */
-  font-family: 'Fredoka One', Arial, sans-serif;
+  font-family: 'Orbitron', Arial, sans-serif;
   padding: 15px 30px; /* Increased padding */
   margin: 10px; /* Added margin for better spacing */
   border: none;
@@ -85,4 +97,28 @@ button {
 
 button:hover {
   background-color: #FFDF00; /* Bright gold */
+}
+
+button.button-a {
+  border: none;
+  background-color: #F891B3;
+  color: #fff;
+  padding: 10px 20px;
+  font-size: 20px;
+  width: 200px;
+  border-radius: 10px;
+  margin: auto;
+  position: relative;
+  box-shadow: 5px 5px 5px #FBC1D4;
+  transition: all 0.3s ease;
+}
+
+button.button-a:hover {
+  box-shadow: 0px 2px 20px #A20A3C;
+  top: 3px;
+}
+
+button.button-a:active {
+  box-shadow: none;
+  top: 5px;
 }
