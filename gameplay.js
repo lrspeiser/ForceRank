@@ -1,3 +1,5 @@
+//gameplay.js - do not remove this header or logs
+
 const admin = require("firebase-admin");
 console.log("[gameplay.js] Firebase Admin module required");
 
@@ -171,28 +173,17 @@ function handleLockRankings(socket, io) {
         );
 
         const db = admin.database();
-        console.log(
-            "[gameplay.js/socket.on('lockRankings')] Firebase database initialized",
-        );
         const gameRef = db.ref(`games/${gameCode}`);
         const userRankingsRef = gameRef.child(`rankings/${userId}`);
         const completedRef = gameRef.child("completed");
-        console.log(
-            `[gameplay.js/socket.on('lockRankings')] Firebase reference created for game code: ${gameCode}`,
-        );
-
-        userRankingsRef.once("value").then((snapshot) => {
-            console.log(
-                `[gameplay.js/lockRankings] Current rankings for user ${userId}: ${JSON.stringify(snapshot.val())}`,
-            );
-        });
 
         userRankingsRef.set(rankings).then(() => {
             console.log(
                 `[gameplay.js/lockRankings] Rankings set for user ${userId}`,
             );
 
-            db.ref(`games/${gameCode}/players/${userId}/state`)
+            gameRef
+                .child(`players/${userId}/state`)
                 .set("Voted")
                 .then(() => {
                     console.log(
@@ -209,140 +200,52 @@ function handleLockRankings(socket, io) {
 
                     gameRef.once("value").then((snapshot) => {
                         const gameData = snapshot.val();
-                        console.log(
-                            `[gameplay.js/lockRankings] Fetched game data: ${JSON.stringify(gameData)}`,
-                        );
-
                         const playerCount = gameData.playersCount;
-                        completedRef.once("value").then((compSnap) => {
-                            const lockedCount = compSnap.val();
-                            console.log(
-                                `[gameplay.js/lockRankings] Current lock count: ${lockedCount}/${playerCount}`,
-                            );
+                        const lockedCount = gameData.completed;
 
-                            if (lockedCount >= playerCount) {
-                                const allRankings = gameData.rankings || {};
-                                const finalScores = {};
-
-                                for (const userRankings of Object.values(
-                                    allRankings,
-                                )) {
-                                    userRankings.forEach(({ name, rank }) => {
-                                        if (!finalScores[name]) {
-                                            finalScores[name] = 0;
-                                        }
-                                        finalScores[name] += rank;
-                                    });
-                                }
-
-                                console.log(
-                                    `[gameplay.js] Final Scores: ${JSON.stringify(finalScores)}`,
-                                );
-
-                                const sortedResults = Object.entries(
-                                    finalScores,
-                                )
-                                    .map(([name, score]) => ({ name, score }))
-                                    .sort((a, b) => a.score - b.score);
-
-                                const finalResults = sortedResults.map(
-                                    (item, index) => ({
-                                        ...item,
-                                        rank: `Rank ${index + 1}`,
-                                    }),
-                                );
-
-                                gameRef
-                                    .child("rankingTerm")
-                                    .once("value", (termSnapshot) => {
-                                        const rankingTerm = termSnapshot.val();
-                                        io.to(gameCode).emit(
-                                            "displayFinalResults",
-                                            {
-                                                finalResults,
-                                                rankingTerm,
-                                            },
-                                        );
-                                    });
-                                console.log(
-                                    `[gameplay.js/lockRankings] Emitted 'displayFinalResults' event to room ${gameCode} with data: ${JSON.stringify({ finalResults, rankingCriteria: gameData.rankingCriteria })}`,
-                                );
-
-                                for (const playerId of Object.keys(
-                                    gameData.rankings || {},
-                                )) {
-                                    db.ref(
-                                        `games/${gameCode}/rankings/${playerId}`,
-                                    )
-                                        .remove()
-                                        .then(() => {
-                                            console.log(
-                                                `[gameplay.js/lockRankings] Cleared rankings for player ${playerId} in game ${gameCode}`,
-                                            );
-                                        });
-                                }
-
-                                gameRef
-                                    .child("completed")
-                                    .set(0)
-                                    .then(() => {
-                                        console.log(
-                                            `[gameplay.js/lockRankings] Reset completed count for game ${gameCode}`,
-                                        );
-                                    });
-
-                                gameRef
-                                    .child("state")
-                                    .set("waiting")
-                                    .then(() => {
-                                        console.log(
-                                            `[gameplay.js/lockRankings] Game state set to waiting for game ${gameCode}`,
-                                        );
-                                    });
-                            } else {
-                                gameRef
-                                    .child(`players/${userId}/state`)
-                                    .once("value")
-                                    .then((stateSnapshot) => {
-                                        const userState = stateSnapshot.val();
-                                        if (userState === "Voted") {
-                                            socket.emit("showWaitingRoom", {
-                                                gameCode,
-                                                lockedCount,
-                                                playersCount: playerCount,
-                                                names: gameData.names,
-                                            });
-                                            console.log(
-                                                `[gameplay.js/lockRankings] Emitted 'showWaitingRoom' event to user ${userId} with lock count: ${lockedCount}/${playerCount}`,
-                                            );
-
-                                            io.to(gameCode).emit(
-                                                "updateLockCount",
-                                                {
-                                                    lockedCount,
-                                                    playersCount: playerCount,
-                                                },
-                                            );
-                                            console.log(
-                                                `[gameplay.js/lockRankings] Emitted 'updateLockCount' event to room ${gameCode} with lock count: ${lockedCount}/${playerCount}`,
-                                            );
-                                        } else {
-                                            console.log(
-                                                `[gameplay.js/lockRankings] User ${userId} is not yet confirmed to have voted. Staying on voting screen.`,
-                                            );
-                                        }
-                                    });
-                            }
+                        io.to(gameCode).emit("updateLockCount", {
+                            lockedCount,
+                            playersCount: playerCount,
                         });
+
+                        if (lockedCount >= playerCount) {
+                            // All players have voted, show final results
+                            const allRankings = gameData.rankings || {};
+                            const finalScores = calculateFinalScores(allRankings);
+                            const finalResults = calculateFinalResults(finalScores);
+
+                            io.to(gameCode).emit("displayFinalResults", {
+                                finalResults,
+                                rankingTerm: gameData.rankingTerm,
+                            });
+                        }
                     });
-                })
-                .catch((error) => {
-                    console.log(
-                        `[gameplay.js/lockRankings] Error setting rankings for user ${userId}: ${error}`,
-                    );
                 });
         });
     });
+}
+
+function calculateFinalScores(allRankings) {
+    const finalScores = {};
+    for (const userRankings of Object.values(allRankings)) {
+        userRankings.forEach(({ name, rank }) => {
+            if (!finalScores[name]) {
+                finalScores[name] = 0;
+            }
+            finalScores[name] += rank;
+        });
+    }
+    return finalScores;
+}
+
+function calculateFinalResults(finalScores) {
+    return Object.entries(finalScores)
+        .map(([name, score]) => ({ name, score }))
+        .sort((a, b) => a.score - b.score)
+        .map((item, index) => ({
+            name: item.name,
+            rank: `Rank ${index + 1}`,
+        }));
 }
 
 // This function handles submitting the rankings for a user
@@ -474,11 +377,8 @@ function handleNextRanking(socket, io) {
             const rankingsRef = db.ref("rankings");
             rankingsRef.once("value").then((rankingsSnapshot) => {
                 const allRankings = rankingsSnapshot.val() || [];
-                const newRankingCriteria = allRankings[newVersion] || [
-                    "Rank",
-                    "Top",
-                    "Bottom",
-                ];
+                const newRankingCriteria =
+                    allRankings[newVersion % allRankings.length];
 
                 gameRef
                     .update({
@@ -491,7 +391,7 @@ function handleNextRanking(socket, io) {
                         console.log(
                             `[gameplay.js/handleNextRanking] Game updated for next round: ${gameCode}`,
                         );
-                        io.to(gameCode).emit("refreshRanking", {
+                        io.to(gameCode).emit("startNewRound", {
                             names: gameData.names,
                             rankingCriteria: newRankingCriteria,
                         });

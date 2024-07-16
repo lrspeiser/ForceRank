@@ -128,24 +128,50 @@ io.on("connection", (socket) => {
     });
 });
 
-// Endpoint to write user UUID to Firebase
-app.post("/writeUser", (req, res) => {
-    const userId = req.body.userId;
-    console.log(`[server.js] Writing user to Firebase: ${userId}`);
+// Endpoint to check if a user exists in Firebase
+app.get("/checkUser/:userId", (req, res) => {
+    const userId = req.params.userId;
+    console.log(
+        `[server.js/checkUser] Checking if user exists in Firebase: ${userId}`,
+    );
 
     admin
         .database()
-        .ref("users/" + userId)
+        .ref(`Users/${userId}`)
+        .once("value")
+        .then((snapshot) => {
+            const exists = snapshot.exists();
+            console.log(
+                `[server.js/checkUser] User ${userId} exists: ${exists}`,
+            );
+            res.json({ exists });
+        })
+        .catch((error) => {
+            console.error(
+                `[server.js/checkUser] Error checking user in Firebase: ${error}`,
+            );
+            res.status(500).json({ error: "Error checking user" });
+        });
+});
+
+// Endpoint to write user UUID to Firebase
+app.post("/writeUser", (req, res) => {
+    const userId = req.body.userId;
+    console.log(`[server.js/writeUser] Writing user to Firebase: ${userId}`);
+
+    admin
+        .database()
+        .ref(`Users/${userId}`)
         .set({ userId: userId })
         .then(() => {
             console.log(
-                `[server.js] Successfully wrote user to Firebase: ${userId}`,
+                `[server.js/writeUser] Successfully wrote user to Firebase: ${userId}`,
             );
             res.status(200).send("User written to Firebase");
         })
         .catch((error) => {
             console.error(
-                `[server.js] Error writing user to Firebase: ${error}`,
+                `[server.js/writeUser] Error writing user to Firebase: ${error}`,
             );
             res.status(500).send("Error writing user to Firebase");
         });

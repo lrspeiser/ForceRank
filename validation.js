@@ -1,9 +1,11 @@
+// validation.js - don't remove this header or any logs
+
 const admin = require("firebase-admin");
 console.log("[validation.js] Firebase Admin initialized");
 
 function writeUserToFirebase(userId) {
     const db = admin.database();
-    const userRef = db.ref(`users/${userId}`);
+    const userRef = db.ref(`Users/${userId}`);
 
     return userRef
         .once("value")
@@ -16,7 +18,7 @@ function writeUserToFirebase(userId) {
                     .set({ userId })
                     .then(() => {
                         console.log(
-                            `[validation.js/writeUserToFirebase] Added new user ${userId} to 'users' directory`,
+                            `[validation.js/writeUserToFirebase] Added new user ${userId} to 'Users' directory`,
                         );
                     })
                     .catch((error) => {
@@ -26,7 +28,7 @@ function writeUserToFirebase(userId) {
                     });
             } else {
                 console.log(
-                    `[validation.js/writeUserToFirebase] User ${userId} already exists in 'users' directory`,
+                    `[validation.js/writeUserToFirebase] User ${userId} already exists in 'Users' directory`,
                 );
             }
         })
@@ -56,7 +58,7 @@ function handleCreateGame(socket, io) {
                     .set({
                         names,
                         creator: userId,
-                        players: { [userId]: true },
+                        players: { [userId]: { state: "Waiting" } },
                         playersCount: 1,
                         completed: 0,
                         version: 0,
@@ -68,7 +70,7 @@ function handleCreateGame(socket, io) {
                                 {
                                     names,
                                     creator: userId,
-                                    players: { [userId]: true },
+                                    players: { [userId]: { state: "Waiting" } },
                                     playersCount: 1,
                                     completed: 0,
                                     version: 0,
@@ -76,32 +78,39 @@ function handleCreateGame(socket, io) {
                                 },
                             )}`,
                         );
+
+                        socket.join(gameCode);
+                        console.log(
+                            `[validation.js/createGame] Socket joined room: ${gameCode}`,
+                        );
+
+                        io.to(gameCode).emit("gameJoined", {
+                            gameCode,
+                            names,
+                            playersCount: 1,
+                        });
+                        console.log(
+                            `[validation.js/createGame] Emitted 'gameJoined' event to room ${gameCode} with data: ${JSON.stringify(
+                                {
+                                    gameCode,
+                                    names,
+                                    playersCount: 1,
+                                },
+                            )}`,
+                        );
+
+                        socket.emit("joinedWaitingRoom", {
+                            gameCode,
+                            names,
+                            playersCount: 1,
+                            isCreator: true,
+                        });
                     })
                     .catch((error) => {
                         console.error(
                             `[validation.js/createGame] Error creating game: ${error}`,
                         );
                     });
-
-                socket.join(gameCode);
-                console.log(
-                    `[validation.js/createGame] Socket joined room: ${gameCode}`,
-                );
-
-                io.to(gameCode).emit("gameJoined", {
-                    gameCode,
-                    names,
-                    playersCount: 1,
-                });
-                console.log(
-                    `[validation.js/createGame] Emitted 'gameJoined' event to room ${gameCode} with data: ${JSON.stringify(
-                        {
-                            gameCode,
-                            names,
-                            playersCount: 1,
-                        },
-                    )}`,
-                );
             })
             .catch((error) => {
                 console.error(
@@ -139,76 +148,45 @@ function handleJoinGame(socket, io) {
                                 (gameData.playersCount || 0) + 1;
 
                             gameRef
-                                .child("playersCount")
-                                .set(newPlayersCount)
+                                .update({
+                                    [`players/${userId}`]: { state: "Waiting" },
+                                    playersCount: newPlayersCount,
+                                })
                                 .then(() => {
                                     console.log(
                                         `[validation.js/joinGame] Updated player count to ${newPlayersCount} for game code: ${gameCode}`,
                                     );
-                                })
-                                .catch((error) => {
-                                    console.error(
-                                        `[validation.js/joinGame] Error updating player count: ${error}`,
-                                    );
-                                });
 
-                            gameRef
-                                .child(`players/${userId}`)
-                                .set(true)
-                                .then(() => {
+                                    socket.join(gameCode);
                                     console.log(
-                                        `[validation.js/joinGame] Added player ${userId} to game ${gameCode}`,
+                                        `[validation.js/joinGame] Socket joined room: ${gameCode}`,
                                     );
-                                })
-                                .catch((error) => {
-                                    console.error(
-                                        `[validation.js/joinGame] Error adding player to game: ${error}`,
-                                    );
-                                });
 
-                            socket.join(gameCode);
-                            console.log(
-                                `[validation.js/joinGame] Socket joined room: ${gameCode}`,
-                            );
-
-                            io.to(gameCode).emit("playerJoined", {
-                                gameCode,
-                                names: gameData.names,
-                                playersCount: newPlayersCount,
-                            });
-                            console.log(
-                                `[validation.js/joinGame] Emitted 'playerJoined' event to room ${gameCode} with data: ${JSON.stringify(
-                                    {
+                                    io.to(gameCode).emit("playerJoined", {
                                         gameCode,
                                         names: gameData.names,
                                         playersCount: newPlayersCount,
-                                    },
-                                )}`,
-                            );
+                                    });
+
+                                    socket.emit("joinedWaitingRoom", {
+                                        gameCode,
+                                        names: gameData.names,
+                                        playersCount: newPlayersCount,
+                                        isCreator: false,
+                                    });
+                                });
                         } else {
                             console.log(
                                 `[validation.js/joinGame] User ${userId} already joined game ${gameCode}`,
                             );
 
                             socket.join(gameCode);
-                            console.log(
-                                `[validation.js/joinGame] Socket joined room: ${gameCode}`,
-                            );
-
-                            io.to(gameCode).emit("playerJoined", {
+                            socket.emit("joinedWaitingRoom", {
                                 gameCode,
                                 names: gameData.names,
                                 playersCount: gameData.playersCount,
+                                isCreator: false,
                             });
-                            console.log(
-                                `[validation.js/joinGame] Emitted 'playerJoined' event to room ${gameCode} with data: ${JSON.stringify(
-                                    {
-                                        gameCode,
-                                        names: gameData.names,
-                                        playersCount: gameData.playersCount,
-                                    },
-                                )}`,
-                            );
                         }
                     })
                     .catch((error) => {

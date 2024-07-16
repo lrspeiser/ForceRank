@@ -32,40 +32,62 @@ function initializeGame(gameCode, names, rankingTerm, playersCount) {
     .map((_, index) => `<div class="rank-number">${index + 1}</div>`)
     .join("");
 
+  initializeSortableList(names);
+}
+
+function getRankings() {
+  const sortableItems = document.querySelectorAll("#sortable .sortable-item");
+  return Array.from(sortableItems).map((item, index) => ({
+    name: item.textContent,
+    rank: index + 1,
+  }));
+}
+
+function initializeSortableList(names) {
   const sortableList = document.getElementById("sortable");
   sortableList.innerHTML = names
     .map((name) => `<li class="sortable-item">${name}</li>`)
     .join("");
 
-  new Sortable(sortable, {
+  new Sortable(sortableList, {
     animation: 150,
     ghostClass: "sortable-ghost",
+    onEnd: () => {
+      const updatedRankings = getRankings();
+      const gameCode = localStorage.getItem("gameCode");
+      const userId = localStorage.getItem("userId");
+      socket.emit("updateRankings", {
+        gameCode,
+        userId,
+        rankings: updatedRankings,
+      });
+    },
   });
 }
 
-function updateLockCount(lockedCount, playersCount) {
+socket.on("updateLockCount", ({ lockedCount, playersCount }) => {
   console.log(
-    `[main.js/updateLockCount] Called with lockedCount: ${lockedCount}, playersCount: ${playersCount}`,
+    `[main.js/socket.on('updateLockCount')] Lock count updated: ${lockedCount}/${playersCount}`,
   );
-  updateTextContent(
-    "lockCountText",
-    `${lockedCount}/${playersCount} players locked in`,
-  );
-  console.log(`[main.js/updateLockCount] Updated lockCountText`);
   updateTextContent(
     "waitingVotesText",
     `${lockedCount}/${playersCount} votes placed`,
   );
-  console.log(`[main.js/updateLockCount] Updated waitingVotesText`);
-  if (lockedCount === playersCount) {
-    console.log(
-      `[main.js/updateLockCount] All players have locked in their votes. Displaying results...`,
-    );
-    showFinalResults();
-  } else {
-    console.log(`[main.js/updateLockCount] Waiting for all votes...`);
-  }
-}
+});
+
+socket.on("displayFinalResults", ({ finalResults, rankingTerm }) => {
+  console.log(
+    "[main.js/socket.on('displayFinalResults')] Displaying final results",
+  );
+  hideElement("waitingForVotes");
+  showElement("result");
+  updateTextContent("resultLabel", `Final Results for: Most ${rankingTerm}`);
+
+  const finalResultsList = document.getElementById("finalResults");
+  finalResultsList.innerHTML = finalResults
+    .map((result) => `<li>${result.name} - ${result.rank}</li>`)
+    .join("");
+});
 
 function showFinalResults() {
   console.log(`[main.js/showFinalResults] Called`);
@@ -193,6 +215,14 @@ function initializeEventListeners() {
           `[main.js/lockButton.click] Locking rankings for game code: ${gameCode}, User ID: ${userId}`,
         );
         socket.emit("lockRankings", { gameCode, userId, rankings });
+
+        // Hide the game screen and show the waiting screen
+        hideElement("game");
+        showElement("waitingForVotes");
+        updateTextContent(
+          "waitingVotesText",
+          "Waiting for other players to vote...",
+        );
       }
     });
   }
@@ -209,7 +239,9 @@ socket.on("gameJoined", ({ gameCode, names, playersCount }) => {
   showElement("waitingRoom");
   updateTextContent("waitingRoomGameCode", gameCode);
   updatePlayersList(names);
-  const invitationText = `Hey player, help me Force Rank ${names.join(", ")}. Go to http://forcerank.replit.app/?gameid=${gameCode}`;
+  const invitationText = `Hey player, help me Force Rank ${names.join(
+    ", ",
+  )}. Go to http://forcerank.replit.app/?gameid=${gameCode}`;
   document.getElementById("invitationText").value = invitationText;
   console.log(
     `[main.js/socket.on('gameJoined')] Updated waiting room with game code and player list`,
@@ -224,14 +256,7 @@ socket.on("refreshRanking", ({ names, rankingCriteria }) => {
   showElement("game");
   updateTextContent("topLabel", rankingCriteria[1]);
   updateTextContent("bottomLabel", rankingCriteria[2]);
-  const sortableList = document.getElementById("sortable");
-  sortableList.innerHTML = names
-    .map((name) => `<li class="sortable-item">${name}</li>`)
-    .join("");
-  new Sortable(sortableList, {
-    animation: 150,
-    ghostClass: "sortable-ghost",
-  });
+  initializeSortableList(names);
 });
 
 function handleNameInput(inputElement) {
@@ -269,14 +294,69 @@ function generateGameCode() {
   return code;
 }
 
-function getRankings() {
-  const sortableItems = document.querySelectorAll("#sortable .sortable-item");
-  return Array.from(sortableItems).map((item, index) => ({
-    name: item.textContent,
-    rank: index + 1,
-  }));
+function initializeUser() {
+  let userId = localStorage.getItem("userId");
+  console.log(`[main.js/initializeUser] Checking for existing UUID: ${userId}`);
+
+  if (userId) {
+    console.log(
+      `[main.js/initializeUser] Found existing UUID in local storage: ${userId}`,
+    );
+    checkUserInFirebase(userId);
+  } else {
+    userId = generateNewUserId();
+    console.log(`[main.js/initializeUser] Generated new UUID: ${userId}`);
+    writeUserToFirebase(userId);
+  }
 }
 
+function generateNewUserId() {
+  const newUserId = uuidv4();
+  localStorage.setItem("userId", newUserId);
+  return newUserId;
+}
+
+function checkUserInFirebase(userId) {
+  fetch(`/checkUser/${userId}`)
+    .then((response) => response.json())
+    .then((data) => {
+      if (!data.exists) {
+        console.log(
+          `[main.js/checkUserInFirebase] User ${userId} not found in Firebase. Writing to Firebase.`,
+        );
+        writeUserToFirebase(userId);
+      } else {
+        console.log(
+          `[main.js/checkUserInFirebase] User ${userId} found in Firebase.`,
+        );
+      }
+    })
+    .catch((error) =>
+      console.error("[main.js/checkUserInFirebase] Error:", error),
+    );
+}
+
+function writeUserToFirebase(userId) {
+  fetch("/writeUser", {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({ userId }),
+  })
+    .then((response) => response.text())
+    .then((data) => {
+      console.log(`[main.js/writeUserToFirebase] Server response: ${data}`);
+      socket.emit("initUser", { userId });
+    })
+    .catch((error) => {
+      console.error(
+        `[main.js/writeUserToFirebase] Error writing user to Firebase: ${error}`,
+      );
+    });
+}
+
+// Call initializeUser when the page loads
 window.addEventListener("load", () => {
   console.log("[main.js/load] Page load event triggered");
   const gameCode = localStorage.getItem("gameCode");
@@ -290,6 +370,8 @@ window.addEventListener("load", () => {
     localStorage.setItem("userId", userId);
     console.log(`[main.js/load] Generated new userId: ${userId}`);
   }
+
+  initializeUser(userId);
 
   if (gameCode && userId) {
     console.log(
@@ -310,14 +392,10 @@ socket.on("updateLockCount", ({ lockedCount, playersCount }) => {
   console.log(
     `[main.js/socket.on('updateLockCount')] Lock count updated: ${lockedCount}/${playersCount}`,
   );
-  updateLockCount(lockedCount, playersCount);
-
-  if (lockedCount === playersCount) {
-    console.log(
-      `[main.js/socket.on('updateLockCount')] All players have locked in their votes. Fetching final results...`,
-    );
-    socket.emit("fetchFinalResults", { gameCode });
-  }
+  updateTextContent(
+    "waitingVotesText",
+    `${lockedCount}/${playersCount} votes placed`,
+  );
 });
 
 socket.on("playerJoined", ({ gameCode, names, playersCount }) => {
@@ -353,9 +431,73 @@ function displayFinalResults(finalResults, personalRankings, rankingTerm) {
     .join("");
 }
 
-socket.on("displayFinalResults", ({ finalResults, rankingTerm }) => {
-  const personalRankings = getRankings();
-  displayFinalResults(finalResults, personalRankings, rankingTerm);
+socket.on(
+  "gameExists",
+  ({
+    exists,
+    userExists,
+    gameCode,
+    userId,
+    state,
+    names,
+    playersCount,
+    rankingCriteria,
+  }) => {
+    console.log(
+      `[main.js/socket.on('gameExists')] Game exists: ${exists}, User exists: ${userExists}, Game state: ${state}`,
+    );
+    if (exists && userExists) {
+      if (state === "waiting") {
+        console.log(
+          `[main.js/socket.on('gameExists')] Rejoining waiting room for game: ${gameCode}`,
+        );
+        hideElement("start");
+        showElement("waitingRoom");
+        updateTextContent("waitingRoomGameCode", gameCode);
+        updatePlayersList(names, playersCount);
+      } else if (state === "voting") {
+        console.log(
+          `[main.js/socket.on('gameExists')] Rejoining active game: ${gameCode}`,
+        );
+        socket.emit("rejoinGame", { gameCode, userId });
+      }
+    } else {
+      console.log(
+        "[main.js/socket.on('gameExists')] No active game found. Showing start screen.",
+      );
+      showElement("start");
+    }
+  },
+);
+
+socket.on(
+  "joinedWaitingRoom",
+  ({ gameCode, names, playersCount, isCreator }) => {
+    console.log(
+      `[main.js/socket.on('joinedWaitingRoom')] Joined waiting room for game: ${gameCode}`,
+    );
+    hideElement("start");
+    hideElement("createGame");
+    hideElement("joinGame");
+    showElement("waitingRoom");
+    updateTextContent("waitingRoomGameCode", gameCode);
+    updatePlayersList(names);
+
+    const startGameButton = document.getElementById("startGameButton");
+    if (startGameButton) {
+      startGameButton.style.display = isCreator ? "block" : "none";
+    }
+  },
+);
+
+socket.on("startNewRound", ({ names, rankingCriteria }) => {
+  console.log(
+    `[main.js/socket.on('startNewRound')] Starting new round with criteria: ${rankingCriteria}`,
+  );
+  hideElement("result");
+  showElement("game");
+  updateTextContent("rankingLabel", `Who is the most ${rankingCriteria}?`);
+  initializeSortableList(names);
 });
 
 console.log("[main.js] Script execution completed");
