@@ -35,6 +35,16 @@ body {
   padding: 0;
 }
 
+.sortable-item {
+  display: flex;
+  align-items: center;
+}
+
+.rank-number {
+  margin-right: 10px;
+  font-weight: bold;
+}
+
 #sortable li {
   margin: 5px 0; /* Reduced margin */
   padding: 10px; /* Adjusted padding */
@@ -121,4 +131,81 @@ button.button-a:hover {
 button.button-a:active {
   box-shadow: none;
   top: 5px;
+}
+
+#nameInputs {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  margin-bottom: 20px;
+}
+
+.nameInput {
+  padding: 10px;
+  font-size: 16px;
+  border: 2px solid #FFD700;
+  background-color: #6A0DAD;
+  color: #FFFFFF;
+  border-radius: 5px;
+}
+
+.nameInput::placeholder {
+  color: #CCCCCC;
+}
+
+#rankingContainer {
+  display: flex;
+  align-items: stretch;
+}
+
+#rankNumbers {
+  display: flex;
+  flex-direction: column;
+  justify-content: space-around;
+  margin-right: 10px;
+}
+
+.rank-number {
+  font-weight: bold;
+  padding: 10px 5px;
+}
+
+#sortable {
+  flex-grow: 1;
+  list-style-type: none;
+  padding: 0;
+  margin: 0;
+}
+
+.sortable-item {
+  margin: 5px 0;
+  padding: 10px;
+  background-color: #8A2BE2;
+  color: #FFFFFF;
+  cursor: grab;
+  border-radius: 5px;
+}
+
+#finalResults {
+  display: flex;
+  flex-direction: column;
+}
+
+.result-row {
+  display: flex;
+  margin: 5px 0;
+}
+
+.result-rank {
+  width: 30px;
+  font-weight: bold;
+}
+
+.result-group, .result-personal {
+  flex: 1;
+  padding: 5px 10px;
+  background-color: #8A2BE2;
+  color: #FFFFFF;
+  margin: 0 5px;
+  border-radius: 5px;
 }

@@ -1,63 +1,65 @@
-<!doctype html>
+<!DOCTYPE html>
 <html lang="en">
-    <head>
-        <meta charset="UTF-8" />
-        <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-        <title>Force Rank</title>
-        <link rel="stylesheet" href="style.css" />
-        <link href="https://fonts.googleapis.com/css2?family=Orbitron:wght@700&display=swap" rel="stylesheet">
-        <script src="https://cdn.jsdelivr.net/npm/sortablejs@latest/Sortable.min.js"></script>
-    </head>
-    <body>
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Force Rank</title>
+    <link rel="stylesheet" href="style.css">
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/socket.io/4.7.5/socket.io.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/sortablejs@1.15.2/Sortable.min.js"></script>
+    <script type="module" src="main.js"></script>
+</head>
+<body>
+    <div id="start">
         <h1>Force Rank</h1>
-        <div id="start">
-            <button id="createGameButton" class="button-a">Start Game</button>
-            <button id="joinGameButton" class="button-a">Join Game</button>
+        <button id="createGameButton">Start Game</button>
+        <button id="joinGameButton">Join Game</button>
+    </div>
+
+    <div id="createGame" style="display: none">
+        <h2>Enter player names:</h2>
+        <div id="nameInputs">
+            <input type="text" class="nameInput" placeholder="Enter name">
+            <input type="text" class="nameInput" placeholder="Enter name">
         </div>
-        <div id="createGame" style="display: none">
-            <p>Enter player names separated by a comma or a new line:</p>
-            <textarea
-                id="namesInput"
-                placeholder="Enter names here..."
-            ></textarea>
-            <button id="submitNamesButton" class="button-a">Submit</button>
+        <button id="submitNamesButton">Submit</button>
+    </div>
+
+    <div id="joinGame" style="display: none">
+        <h2>Enter the game code:</h2>
+        <input type="text" id="gameCodeInput" placeholder="Enter game code">
+        <button id="joinGameSubmitButton">Join</button>
+    </div>
+
+    <div id="waitingRoom" style="display: none">
+        <h2>Waiting Room</h2>
+        <p>Game Code: <span id="waitingRoomGameCode"></span></p>
+        <h3>Players:</h3>
+        <ul id="playersList"></ul>
+        <p id="lockCount"></p>
+        <button id="startGameButton">Start Game</button>
+        <textarea id="invitationText" readonly></textarea>
+    </div>
+
+    <div id="game" style="display: none">
+        <h2 id="rankingLabel"></h2>
+        <div id="rankingContainer">
+            <div id="rankNumbers"></div>
+            <ul id="sortable"></ul>
         </div>
-        <div id="joinGame" style="display: none">
-            <p>Enter the game code:</p>
-            <input type="text" id="gameCodeInput" placeholder="Game Code" />
-            <button id="joinGameSubmitButton" class="button-a">Join</button>
-        </div>
-        <div id="waitingRoom" style="display: none">
-            <h2>Waiting Room</h2>
-            <p>Game Code: <span id="waitingRoomGameCode"></span></p>
-            <textarea id="invitationText" readonly></textarea>
-            <ul id="playersList"></ul>
-            <p id="playerCount"></p>
-            <button id="startGameButton" class="button-a" style="display: none">
-                Start Game
-            </button>
-        </div>
-        <div id="game" style="display: none">
-            <h2 id="nameDisplay"></h2>
-            <h3 id="topLabel"></h3>
-            <div id="dragContainer">
-                <ul id="sortable"></ul>
-            </div>
-            <h3 id="bottomLabel"></h3>
-            <button id="lockButton" class="button-a" type="button">Lock It In</button>
-            <p id="lockCount"></p>
-            <p id="waitingVotesText"></p>
-        </div>
-        <div id="result" style="display: none">
-            <h2 id="resultText">Waiting for all votes...</h2>
-            <ul id="finalResults"></ul>
-            <button id="nextButton" class="button-a" style="display: none">Next</button>
-        </div>
-        <div id="waitingForVotes" style="display: none">
-            <h2>Waiting for Votes</h2>
-            <p id="waitingVotesCount"></p>
-        </div>
-        <script src="https://cdn.socket.io/4.3.2/socket.io.min.js"></script>
-        <script type="module" src="main.js"></script>
-    </body>
+        <button id="lockButton">Lock It In</button>
+    </div>
+
+    <div id="result" style="display: none">
+        <h2 id="resultLabel"></h2>
+        <div id="finalResults"></div>
+        <button id="nextButton">Next</button>
+    </div>
+
+    <div id="waitingForVotes" style="display: none">
+        <h2>Waiting for Votes</h2>
+        <p id="waitingVotesText"></p>
+        <p id="waitingVotesCount"></p>
+    </div>
+</body>
 </html>

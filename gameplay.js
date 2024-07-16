@@ -3,100 +3,39 @@ console.log("[gameplay.js] Firebase Admin module required");
 
 // This function handles the logic for starting a game
 function handleStartGame(socket, io) {
-    console.log("[gameplay.js/handleStartGame] Function initialized");
     socket.on("startGame", ({ gameCode }) => {
         console.log(
             `[gameplay.js/socket.on('startGame')] Starting game for game code: ${gameCode}`,
         );
 
         const db = admin.database();
-        console.log(
-            "[gameplay.js/socket.on('startGame')] Firebase database initialized",
-        );
         const gameRef = db.ref(`games/${gameCode}`);
-        console.log(
-            `[gameplay.js/socket.on('startGame')] Firebase reference created for game code: ${gameCode}`,
-        );
 
         gameRef.once("value").then((gameSnapshot) => {
-            console.log(
-                "[gameplay.js/socket.on('startGame')] Fetching game data",
-            );
             const gameData = gameSnapshot.val() || {};
-            console.log(
-                `[gameplay.js/startGame] Fetched game data: ${JSON.stringify(gameData)}`,
-            );
             const version = gameData.version || 0;
-            console.log(`[gameplay.js/startGame] Game version: ${version}`);
 
-            const rankingsRef = db.ref("rankings");
-            console.log(
-                "[gameplay.js/socket.on('startGame')] Fetching rankings data",
-            );
-            rankingsRef.once("value").then((rankingsSnapshot) => {
-                const allRankings = rankingsSnapshot.val() || [];
-                const rankingCriteria = allRankings[version] || [
-                    "Rank",
-                    "Top",
-                    "Bottom",
-                ];
-                console.log(
-                    `[gameplay.js/startGame] Fetched ranking criteria: ${JSON.stringify(rankingCriteria)}`,
-                );
+            db.ref("rankings")
+                .once("value")
+                .then((rankingsSnapshot) => {
+                    const allRankings = rankingsSnapshot.val() || [];
+                    const rankingTerm =
+                        allRankings[version % allRankings.length];
 
-                const initialRankings = gameData.names.map((name, index) => ({
-                    name,
-                    rank: index + 1,
-                }));
-                console.log(
-                    `[gameplay.js/startGame] Initial rankings: ${JSON.stringify(initialRankings)}`,
-                );
-
-                for (const playerId of Object.keys(gameData.players || {})) {
-                    db.ref(`games/${gameCode}/rankings/${playerId}`)
-                        .set(initialRankings)
+                    gameRef
+                        .update({
+                            rankingTerm: rankingTerm,
+                            state: "voting",
+                        })
                         .then(() => {
-                            console.log(
-                                `[gameplay.js/startGame] Initial rankings set for player ${playerId}: ${JSON.stringify(initialRankings)}`,
-                            );
+                            io.to(gameCode).emit("startGame", {
+                                gameCode,
+                                names: gameData.names,
+                                rankingTerm,
+                                playersCount: gameData.playersCount,
+                            });
                         });
-                    db.ref(`games/${gameCode}/players/${playerId}/state`)
-                        .set("Voting")
-                        .then(() => {
-                            console.log(
-                                `[gameplay.js/startGame] Set player ${playerId} state to 'Voting'`,
-                            );
-                        });
-                }
-
-                gameRef
-                    .child("rankingCriteria")
-                    .set(rankingCriteria)
-                    .then(() => {
-                        console.log(
-                            `[gameplay.js/startGame] Ranking criteria set for game code: ${gameCode}`,
-                        );
-                    });
-
-                gameRef
-                    .child("state")
-                    .set("voting")
-                    .then(() => {
-                        console.log(
-                            `[gameplay.js/startGame] Game state set to voting for game code: ${gameCode}`,
-                        );
-                    });
-
-                io.to(gameCode).emit("startGame", {
-                    gameCode,
-                    names: gameData.names,
-                    rankingCriteria,
-                    playersCount: gameData.playersCount,
                 });
-                console.log(
-                    `[gameplay.js/startGame] Emitted 'startGame' event to room ${gameCode} with data: ${JSON.stringify({ gameCode, names: gameData.names, rankingCriteria, playersCount: gameData.playersCount })}`,
-                );
-            });
         });
     });
 }
@@ -313,10 +252,18 @@ function handleLockRankings(socket, io) {
                                     }),
                                 );
 
-                                io.to(gameCode).emit("displayFinalResults", {
-                                    finalResults,
-                                    rankingCriteria: gameData.rankingCriteria,
-                                });
+                                gameRef
+                                    .child("rankingTerm")
+                                    .once("value", (termSnapshot) => {
+                                        const rankingTerm = termSnapshot.val();
+                                        io.to(gameCode).emit(
+                                            "displayFinalResults",
+                                            {
+                                                finalResults,
+                                                rankingTerm,
+                                            },
+                                        );
+                                    });
                                 console.log(
                                     `[gameplay.js/lockRankings] Emitted 'displayFinalResults' event to room ${gameCode} with data: ${JSON.stringify({ finalResults, rankingCriteria: gameData.rankingCriteria })}`,
                                 );
@@ -502,109 +449,53 @@ function handleSubmitRankings(socket, io) {
 
 // This function handles moving to the next ranking round
 function handleNextRanking(socket, io) {
-    console.log("[gameplay.js/handleNextRanking] Function initialized");
     socket.on("nextRanking", ({ gameCode }) => {
         console.log(
-            `[gameplay.js/socket.on('nextRanking')] Next ranking for game code: ${gameCode}`,
+            `[gameplay.js/handleNextRanking] Moving to next ranking for game code: ${gameCode}`,
         );
 
         const db = admin.database();
-        console.log(
-            "[gameplay.js/socket.on('nextRanking')] Firebase database initialized",
-        );
         const gameRef = db.ref(`games/${gameCode}`);
-        console.log(
-            `[gameplay.js/socket.on('nextRanking')] Firebase reference created for game code: ${gameCode}`,
-        );
 
         gameRef.once("value").then((snapshot) => {
-            console.log(
-                "[gameplay.js/socket.on('nextRanking')] Fetching game data",
-            );
-            const gameData = snapshot.val() || {};
-            console.log(
-                `[gameplay.js/nextRanking] Fetched game data: ${JSON.stringify(gameData)}`,
-            );
-            const newVersion = (gameData.version || 0) + 1;
-            console.log(`[gameplay.js/nextRanking] New version: ${newVersion}`);
+            const gameData = snapshot.val();
+            if (!gameData) {
+                console.log(
+                    `[gameplay.js/handleNextRanking] Game not found: ${gameCode}`,
+                );
+                return;
+            }
 
-            gameRef
-                .child("version")
-                .set(newVersion)
-                .then(() => {
-                    console.log(
-                        `[gameplay.js/nextRanking] Version incremented to ${newVersion} for game code: ${gameCode}`,
-                    );
-                });
-            gameRef
-                .child("completed")
-                .set(0)
-                .then(() => {
-                    console.log(
-                        `[gameplay.js/nextRanking] Completed count reset for game code: ${gameCode}`,
-                    );
-                });
-            gameRef
-                .child("rankings")
-                .remove()
-                .then(() => {
-                    console.log(
-                        `[gameplay.js/nextRanking] Rankings cleared for game code: ${gameCode}`,
-                    );
-                });
+            const newVersion = (gameData.version || 0) + 1;
+            console.log(
+                `[gameplay.js/handleNextRanking] New game version: ${newVersion}`,
+            );
 
             const rankingsRef = db.ref("rankings");
-            console.log(
-                "[gameplay.js/socket.on('nextRanking')] Fetching rankings data",
-            );
             rankingsRef.once("value").then((rankingsSnapshot) => {
                 const allRankings = rankingsSnapshot.val() || [];
-                const rankingCriteria = allRankings[newVersion];
-                console.log(
-                    `[gameplay.js/nextRanking] Fetched ranking criteria: ${JSON.stringify(rankingCriteria)}`,
-                );
-                const names = gameData.names;
-                const initialRankings = names.map((name, index) => ({
-                    name,
-                    rank: index + 1,
-                }));
-                console.log(
-                    `[gameplay.js/nextRanking] Initial rankings: ${JSON.stringify(initialRankings)}`,
-                );
-
-                for (const playerId of Object.keys(gameData.players || {})) {
-                    db.ref(`games/${gameCode}/rankings/${playerId}`)
-                        .set(initialRankings)
-                        .then(() => {
-                            console.log(
-                                `[gameplay.js/nextRanking] Initial rankings set for player ${playerId}: ${JSON.stringify(initialRankings)}`,
-                            );
-                        });
-                    db.ref(`games/${gameCode}/players/${playerId}/state`)
-                        .set("Voting")
-                        .then(() => {
-                            console.log(
-                                `[gameplay.js/nextRanking] Set player ${playerId} state to 'Voting'`,
-                            );
-                        });
-                }
+                const newRankingCriteria = allRankings[newVersion] || [
+                    "Rank",
+                    "Top",
+                    "Bottom",
+                ];
 
                 gameRef
-                    .child("state")
-                    .set("voting")
+                    .update({
+                        version: newVersion,
+                        rankingCriteria: newRankingCriteria,
+                        state: "voting",
+                        completed: 0,
+                    })
                     .then(() => {
                         console.log(
-                            `[gameplay.js/nextRanking] Game state set to voting for game code: ${gameCode}`,
+                            `[gameplay.js/handleNextRanking] Game updated for next round: ${gameCode}`,
                         );
+                        io.to(gameCode).emit("refreshRanking", {
+                            names: gameData.names,
+                            rankingCriteria: newRankingCriteria,
+                        });
                     });
-
-                io.to(gameCode).emit("refreshRanking", {
-                    names,
-                    rankingCriteria,
-                });
-                console.log(
-                    `[gameplay.js/nextRanking] Emitted 'refreshRanking' event to room ${gameCode} with data: ${JSON.stringify({ names, rankingCriteria })}`,
-                );
             });
         });
     });

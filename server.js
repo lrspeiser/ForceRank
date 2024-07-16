@@ -68,11 +68,45 @@ const {
     handleLockRankings,
 } = require("./gameplay"); // Import from gameplay.js
 
+function initializeUserTerms(userId) {
+    const db = admin.database();
+    const userRef = db.ref(`Users/${userId}`);
+    const termsRef = userRef.child("Terms");
+
+    termsRef.once("value", (snapshot) => {
+        if (!snapshot.exists()) {
+            db.ref("rankings").once("value", (rankingsSnapshot) => {
+                const defaultTerms = rankingsSnapshot.val() || [];
+                termsRef
+                    .set(defaultTerms)
+                    .then(() =>
+                        console.log(
+                            `[server.js/initializeUserTerms] Default terms set for user ${userId}`,
+                        ),
+                    )
+                    .catch((error) =>
+                        console.error(
+                            `[server.js/initializeUserTerms] Error setting default terms for user ${userId}:`,
+                            error,
+                        ),
+                    );
+            });
+        }
+    });
+}
+
 // Set up a connection event listener for socket.io
 console.log("[server.js] Setting up socket.io connection event listener");
 io.on("connection", (socket) => {
     // Log a message when a user connects
     console.log("[server.js/io.on(connection)] A user connected");
+
+    socket.on("initUser", ({ userId }) => {
+        console.log(
+            `[server.js/socket.on(initUser)] Initializing user: ${userId}`,
+        );
+        initializeUserTerms(userId);
+    });
 
     // Attach event handlers for game-related actions
     console.log("[server.js] Attaching game-related event handlers");
