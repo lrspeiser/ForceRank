@@ -6,6 +6,7 @@ import {
     updatePlayersList,
 } from "./domUtils.js";
 import { generateGameCode } from "./utils.js";
+import { getUserId } from "./uuidManager.js";
 
 const eventListeners = () => {
     console.log("[eventListeners.js] Setting up event listeners");
@@ -164,17 +165,16 @@ const eventListeners = () => {
     console.log(
         "[eventListeners.js] Adding event listener to 'joinGameSubmitButton'",
     );
-    joinGameSubmitButton.addEventListener("click", () => {
+    joinGameSubmitButton.addEventListener("click", async () => {
         const gameCode = gameCodeInput.value.trim();
-        userId = uuidv4();
+        const userId = await getUserId();
 
         if (gameCode) {
             console.log(
-                `[eventListeners.js/joinGameSubmitButton.click] Game code: ${gameCode}, UUID: ${userId}, Creator: false`,
+                `[eventListeners.js/joinGameSubmitButton.click] Game code: ${gameCode}, UUID: ${userId}`,
             );
             socket.emit("joinGame", { gameCode, userId });
             localStorage.setItem("gameCode", gameCode);
-            localStorage.setItem("userId", userId);
             localStorage.removeItem("isCreator");
             console.log(
                 "[eventListeners.js/joinGameSubmitButton.click] Removed creator flag from local storage",

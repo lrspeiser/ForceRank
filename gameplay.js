@@ -149,7 +149,7 @@ function handleUpdateRankings(socket, io) {
 
 // This function handles locking in the rankings for a user
 function handleLockRankings(socket, io) {
-    socket.on("lockRankings", ({ gameCode, userId }) => {
+    socket.on("lockRankings", ({ gameCode, userId, rankings }) => {
         console.log(
             `[gameplay.js/socket.on('lockRankings')] Locking rankings for game code: ${gameCode}, User ID: ${userId}`,
         );
@@ -167,19 +167,38 @@ function handleLockRankings(socket, io) {
                 }
                 game.players[userId].state = "Voted";
                 game.completed = (game.completed || 0) + 1;
+                game.rankings[userId] = rankings;
+
+                console.log(
+                    `[gameplay.js/lockRankings] Updated game state: completed=${game.completed}, playersCount=${game.playersCount}`,
+                );
 
                 if (game.completed >= game.playersCount) {
                     game.state = "completed";
-                    const finalResults = calculateFinalResults(game.rankings);
+                    const { groupRanking, playerVotes } = calculateFinalResults(
+                        game.rankings,
+                        game.creator,
+                    );
+                    console.log(
+                        `[gameplay.js/lockRankings] Emitting final results. Creator: ${game.creator}`,
+                    );
                     io.to(gameCode).emit("displayFinalResults", {
-                        finalResults,
+                        groupRanking,
+                        playerVotes,
                         rankingTerm: game.rankingTerm,
+                        creator: game.creator,
                     });
+                    console.log(
+                        `[gameplay.js/lockRankings] Game ${gameCode} completed, emitted final results`,
+                    );
                 } else {
                     io.to(gameCode).emit("updateLockCount", {
                         lockedCount: game.completed,
                         playersCount: game.playersCount,
                     });
+                    console.log(
+                        `[gameplay.js/lockRankings] Emitted updateLockCount for game ${gameCode}`,
+                    );
                 }
             }
             return game;
@@ -187,27 +206,37 @@ function handleLockRankings(socket, io) {
     });
 }
 
-function calculateFinalScores(allRankings) {
-    const finalScores = {};
-    for (const userRankings of Object.values(allRankings)) {
-        userRankings.forEach(({ name, rank }) => {
-            if (!finalScores[name]) {
-                finalScores[name] = 0;
-            }
-            finalScores[name] += rank;
+function calculateFinalResults(allRankings, creatorId) {
+    const totalScores = {};
+    const playerVotes = {};
+
+    // Calculate total scores and store individual votes
+    for (const [userId, rankings] of Object.entries(allRankings)) {
+        playerVotes[userId] = rankings;
+        rankings.forEach(({ name, rank }) => {
+            if (!totalScores[name]) totalScores[name] = 0;
+            totalScores[name] += rank;
         });
     }
-    return finalScores;
-}
 
-function calculateFinalResults(finalScores) {
-    return Object.entries(finalScores)
-        .map(([name, score]) => ({ name, score }))
-        .sort((a, b) => a.score - b.score)
-        .map((item, index) => ({
-            name: item.name,
-            rank: `Rank ${index + 1}`,
-        }));
+    // Sort names by total score (ascending)
+    let sortedNames = Object.entries(totalScores)
+        .sort(([nameA, scoreA], [nameB, scoreB]) => {
+            if (scoreA === scoreB) {
+                // Use creator's vote as tiebreaker
+                const creatorRankA = playerVotes[creatorId].find(
+                    (r) => r.name === nameA,
+                ).rank;
+                const creatorRankB = playerVotes[creatorId].find(
+                    (r) => r.name === nameB,
+                ).rank;
+                return creatorRankA - creatorRankB;
+            }
+            return scoreA - scoreB;
+        })
+        .map(([name], index) => ({ name, rank: index + 1 }));
+
+    return { groupRanking: sortedNames, playerVotes };
 }
 
 // This function handles submitting the rankings for a user
@@ -314,54 +343,49 @@ function handleSubmitRankings(socket, io) {
 
 // This function handles moving to the next ranking round
 function handleNextRanking(socket, io) {
-    socket.on("nextRanking", ({ gameCode }) => {
-        console.log(
-            `[gameplay.js/handleNextRanking] Moving to next ranking for game code: ${gameCode}`,
-        );
+    socket.on("nextRanking", ({ gameCode, userId }) => {
+        console.log(`[gameplay.js/handleNextRanking] Moving to next ranking for game code: ${gameCode}`);
 
         const db = admin.database();
         const gameRef = db.ref(`games/${gameCode}`);
+        const userRef = db.ref(`Users/${userId}`);
 
-        gameRef.once("value").then((snapshot) => {
-            const gameData = snapshot.val();
-            if (!gameData) {
-                console.log(
-                    `[gameplay.js/handleNextRanking] Game not found: ${gameCode}`,
-                );
-                return;
-            }
+        Promise.all([gameRef.once('value'), userRef.once('value')])
+            .then(([gameSnapshot, userSnapshot]) => {
+                const game = gameSnapshot.val();
+                const user = userSnapshot.val();
 
-            const newVersion = (gameData.version || 0) + 1;
-            console.log(
-                `[gameplay.js/handleNextRanking] New game version: ${newVersion}`,
-            );
+                if (game && user) {
+                    game.version = (game.version || 0) + 1;
+                    game.completed = 0;
+                    game.state = "voting";
+                    game.rankings = {};
 
-            const rankingsRef = db.ref("rankings");
-            rankingsRef.once("value").then((rankingsSnapshot) => {
-                const allRankings = rankingsSnapshot.val() || [];
-                const newRankingCriteria =
-                    allRankings[newVersion % allRankings.length];
+                    const userRankings = user.rankings || [];
+                    game.rankingTerm = userRankings[game.version % userRankings.length];
 
-                gameRef
-                    .update({
-                        version: newVersion,
-                        rankingCriteria: newRankingCriteria,
-                        state: "voting",
-                        completed: 0,
-                    })
-                    .then(() => {
-                        console.log(
-                            `[gameplay.js/handleNextRanking] Game updated for next round: ${gameCode}`,
-                        );
-                        io.to(gameCode).emit("startNewRound", {
-                            names: gameData.names,
-                            rankingCriteria: newRankingCriteria,
-                        });
+                    Object.keys(game.players).forEach((playerId) => {
+                        game.players[playerId].state = "Voting";
                     });
+
+                    return gameRef.set(game).then(() => {
+                        io.to(gameCode).emit("startNewRound", {
+                            names: game.names,
+                            rankingTerm: game.rankingTerm,
+                        });
+                        console.log(`[gameplay.js/handleNextRanking] Emitted startNewRound for game ${gameCode} with term ${game.rankingTerm}`);
+                    });
+                } else {
+                    console.error(`[gameplay.js/handleNextRanking] Game or user not found for gameCode: ${gameCode}, userId: ${userId}`);
+                }
+            })
+            .catch((error) => {
+                console.error(`[gameplay.js/handleNextRanking] Error updating game: ${error}`);
             });
-        });
     });
 }
+
+
 
 module.exports = {
     handleStartGame,

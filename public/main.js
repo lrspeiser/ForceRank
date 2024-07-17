@@ -1,10 +1,12 @@
-import { v4 as uuidv4 } from "https://cdn.jsdelivr.net/npm/uuid@8.3.2/+esm";
+// main.js
+
 import {
   hideElement,
   showElement,
   updateTextContent,
   updatePlayersList,
 } from "./domUtils.js";
+import { getUserId } from "./uuidManager.js";
 
 console.log("[main.js] Import statements executed");
 
@@ -18,11 +20,23 @@ function logFetchCall(url, options) {
 }
 
 function getRankings() {
-  const sortableItems = document.querySelectorAll("#sortable .sortable-item");
+  const sortableItems = document.querySelectorAll("#sortable li");
   return Array.from(sortableItems).map((item, index) => ({
     name: item.textContent,
     rank: index + 1,
   }));
+}
+
+function logLocalStorageContents() {
+  console.log("[main.js/logLocalStorageContents] Contents of local storage:");
+  for (let i = 0; i < localStorage.length; i++) {
+    const key = localStorage.key(i);
+    const value = localStorage.getItem(key);
+    console.log(`[main.js/logLocalStorageContents] ${key}: ${value}`);
+  }
+  if (localStorage.length === 0) {
+    console.log("[main.js/logLocalStorageContents] Local storage is empty");
+  }
 }
 
 function initializeGame(gameCode, names, rankingTerm, playersCount) {
@@ -83,26 +97,66 @@ socket.on("updateLockCount", ({ lockedCount, playersCount }) => {
   );
 });
 
-socket.on("displayFinalResults", ({ finalResults, rankingTerm }) => {
-  console.log(
-    "[main.js/socket.on('displayFinalResults')] Displaying final results",
-  );
-  hideElement("waitingForVotes");
-  showElement("result");
-  updateTextContent("resultLabel", `Final Results for: Most ${rankingTerm}`);
+socket.on(
+  "displayFinalResults",
+  ({ groupRanking, playerVotes, rankingTerm }) => {
+    console.log(
+      "[main.js/socket.on('displayFinalResults')] Displaying final results",
+    );
+    hideElement("game");
+    hideElement("waitingForVotes");
+    showElement("result");
 
-  const finalResultsList = document.getElementById("finalResults");
-  finalResultsList.innerHTML = finalResults
-    .map((result) => `<li>${result.name} - ${result.rank}</li>`)
-    .join("");
-});
+    const userId = localStorage.getItem("userId");
+    const userVotes = playerVotes[userId];
 
-function showFinalResults() {
-  console.log(`[main.js/showFinalResults] Called`);
-  hideElement("waitingRoom");
-  showElement("result");
-  console.log(`[main.js/showFinalResults] Showing final results`);
-}
+    const resultTable = document.getElementById("resultTable");
+    if (resultTable) {
+      resultTable.innerHTML = `
+            <tr>
+                <th>Rank</th>
+                <th>Group Vote</th>
+                <th>Your Vote</th>
+            </tr>
+            ${groupRanking
+              .map(({ name, rank }) => {
+                const userVote = userVotes.find((v) => v.rank === rank).name;
+                return `
+                    <tr>
+                        <td>${rank}</td>
+                        <td>${name}</td>
+                        <td>${userVote}</td>
+                    </tr>
+                `;
+              })
+              .join("")}
+        `;
+    } else {
+      console.error(
+        "[main.js/socket.on('displayFinalResults')] Result table element not found",
+      );
+    }
+
+    updateTextContent("resultLabel", `Final Results for: Most ${rankingTerm}`);
+
+    // Show next button only for the creator
+    const nextButton = document.getElementById("nextButton");
+    const isCreator = localStorage.getItem("isCreator") === "true";
+    console.log(
+      `[main.js/socket.on('displayFinalResults')] Is creator: ${isCreator}`,
+    );
+    if (nextButton) {
+      nextButton.style.display = isCreator ? "block" : "none";
+      console.log(
+        `[main.js/socket.on('displayFinalResults')] Next button display: ${nextButton.style.display}`,
+      );
+    } else {
+      console.error(
+        "[main.js/socket.on('displayFinalResults')] Next button element not found",
+      );
+    }
+  },
+);
 
 function initializeEventListeners() {
   console.log("[main.js/initializeEventListeners] Setting up event listeners");
@@ -116,18 +170,20 @@ function initializeEventListeners() {
   const createGameDiv = document.getElementById("createGame");
   const nameInputsContainer = document.getElementById("nameInputs");
   const nextButton = document.getElementById("nextButton");
+
   if (nextButton) {
     nextButton.addEventListener("click", () => {
       console.log("[main.js/nextButton.click] Next button clicked");
       const gameCode = localStorage.getItem("gameCode");
-      if (gameCode) {
+      const userId = localStorage.getItem("userId");
+      if (gameCode && userId) {
         console.log(
-          `[main.js/nextButton.click] Requesting next round for game code: ${gameCode}`,
+          `[main.js/nextButton.click] Requesting next round for game code: ${gameCode}, userId: ${userId}`,
         );
-        socket.emit("nextRanking", { gameCode });
+        socket.emit("nextRanking", { gameCode, userId });
       } else {
         console.log(
-          "[main.js/nextButton.click] Error: No game code found in local storage",
+          "[main.js/nextButton.click] Error: No game code or userId found in local storage",
         );
       }
     });
@@ -161,15 +217,14 @@ function initializeEventListeners() {
 
   if (submitNamesButton) {
     submitNamesButton.addEventListener("click", () => {
-      console.log(
-        "[main.js/submitNamesButton.click] Submit Names button clicked",
-      );
       const names = getValidNames();
       if (names.length >= 2) {
         const gameCode = generateGameCode();
-        const userId = localStorage.getItem("userId"); // Use the existing UUID from local storage
+        const userId = localStorage.getItem("userId");
+        localStorage.setItem("gameCode", gameCode);
+        localStorage.setItem("isCreator", "true"); // Set this flag for the creator
         console.log(
-          `[main.js/submitNamesButton.click] Game code: ${gameCode}, Names: ${names.join(", ")}, UUID: ${userId}`,
+          `[main.js/submitNamesButton.click] Game code: ${gameCode}, Names: ${names.join(", ")}, UUID: ${userId}, isCreator: true`,
         );
         socket.emit("createGame", { gameCode, names, userId });
       } else {
@@ -183,15 +238,13 @@ function initializeEventListeners() {
 
   if (joinGameSubmitButton) {
     joinGameSubmitButton.addEventListener("click", () => {
-      console.log(
-        "[main.js/joinGameSubmitButton.click] Join Game Submit button clicked",
-      );
-      const gameCodeInput = document.getElementById("gameCodeInput");
       const gameCode = gameCodeInput.value.trim();
       if (gameCode) {
-        const userId = uuidv4();
+        const userId = localStorage.getItem("userId");
+        localStorage.setItem("gameCode", gameCode);
+        localStorage.removeItem("isCreator"); // Clear the isCreator flag when joining a game
         console.log(
-          `[main.js/joinGameSubmitButton.click] Game code: ${gameCode}, UUID: ${userId}`,
+          `[main.js/joinGameSubmitButton.click] Game code: ${gameCode}, UUID: ${userId}, isCreator: false`,
         );
         socket.emit("joinGame", { gameCode, userId });
       }
@@ -308,40 +361,63 @@ function generateGameCode() {
   return code;
 }
 
-function initializeUser() {
-  return new Promise((resolve, reject) => {
-    let userId = localStorage.getItem("userId");
-    let gameCode = localStorage.getItem("gameCode");
-    console.log(
-      `[main.js/initializeUser] Checking for existing UUID: ${userId} and gameCode: ${gameCode}`,
-    );
+async function initializeUser() {
+  let userId = localStorage.getItem("userId");
+  let gameCode = localStorage.getItem("gameCode");
+  console.log(
+    `[main.js/initializeUser] Using UUID: ${userId}, gameCode: ${gameCode}`,
+  );
 
-    if (userId) {
-      console.log(
-        `[main.js/initializeUser] Found existing UUID in local storage: ${userId}`,
+  if (!userId) {
+    userId = generateNewUserId();
+    localStorage.setItem("userId", userId);
+    console.log(`[main.js/initializeUser] Generated new UUID: ${userId}`);
+  }
+
+  try {
+    const response = await fetch(`/initUser/${userId}`);
+    const data = await response.json();
+    if (!data.success) {
+      console.error(
+        `[main.js/initializeUser] Failed to initialize user: ${data.error}`,
       );
-      checkUserAndGame(userId, gameCode)
-        .then(({ userExists, gameExists, gameState }) => {
-          if (!userExists) {
-            userId = generateNewUserId();
-            console.log(
-              `[main.js/initializeUser] Generated new UUID: ${userId}`,
-            );
-          }
-          if (!gameExists) {
-            localStorage.removeItem("gameCode");
-            gameCode = null;
-          }
-          resolve({ userId, gameCode, gameState });
-        })
-        .catch(reject);
     } else {
-      userId = generateNewUserId();
-      console.log(`[main.js/initializeUser] Generated new UUID: ${userId}`);
-      writeUserToFirebase(userId)
-        .then(() => resolve({ userId, gameCode: null, gameState: null }))
-        .catch(reject);
+      console.log(
+        `[main.js/initializeUser] User initialized successfully: ${userId}`,
+      );
     }
+  } catch (error) {
+    console.error(`[main.js/initializeUser] Error initializing user: ${error}`);
+  }
+
+  if (gameCode) {
+    try {
+      const response = await fetch(`/checkGameExists/${gameCode}`);
+      const data = await response.json();
+      if (!data.exists) {
+        console.log(
+          `[main.js/initializeUser] Game ${gameCode} not found in Firebase. Clearing local storage.`,
+        );
+        localStorage.removeItem("gameCode");
+        gameCode = null;
+      }
+    } catch (error) {
+      console.error(
+        `[main.js/initializeUser] Error checking game existence: ${error}`,
+      );
+      localStorage.removeItem("gameCode");
+      gameCode = null;
+    }
+  }
+
+  return { userId, gameCode };
+}
+
+function generateNewUserId() {
+  return "xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx".replace(/[xy]/g, function (c) {
+    var r = (Math.random() * 16) | 0,
+      v = c == "x" ? r : (r & 0x3) | 0x8;
+    return v.toString(16);
   });
 }
 
@@ -353,12 +429,6 @@ function checkUserAndGame(userId, gameCode) {
       console.error("[main.js/checkUserAndGame] Error:", error);
       return { userExists: false, gameExists: false, gameState: null };
     });
-}
-
-function generateNewUserId() {
-  const newUserId = uuidv4();
-  localStorage.setItem("userId", newUserId);
-  return newUserId;
 }
 
 function checkUserInFirebase(userId) {
@@ -386,31 +456,30 @@ function writeUserToFirebase(userId) {
     });
 }
 
-window.addEventListener("load", () => {
+window.addEventListener("load", async () => {
   console.log("[main.js/load] Page load event triggered");
+  console.log("[main.js] Page loaded, logging local storage contents");
+  logLocalStorageContents();
 
-  initializeUser()
-    .then(({ userId, gameCode, gameState }) => {
-      console.log(
-        `[main.js/load] Initialized userId: ${userId}, gameCode: ${gameCode}, gameState: ${gameState}`,
-      );
+  try {
+    const { userId, gameCode } = await initializeUser();
+    console.log(
+      `[main.js/load] Initialized userId: ${userId}, gameCode: ${gameCode}`,
+    );
 
-      if (gameCode && gameState) {
-        console.log(`[main.js/load] Rejoining existing game: ${gameCode}`);
-        socket.emit("rejoinGame", { gameCode, userId });
-      } else {
-        console.log(
-          "[main.js/load] No active game found. Showing start screen.",
-        );
-        showElement("start");
-      }
-
-      initializeEventListeners();
-    })
-    .catch((error) => {
-      console.error("[main.js/load] Error initializing user:", error);
+    if (gameCode) {
+      console.log(`[main.js/load] Rejoining existing game: ${gameCode}`);
+      socket.emit("rejoinGame", { gameCode, userId });
+    } else {
+      console.log("[main.js/load] No active game found. Showing start screen.");
       showElement("start");
-    });
+    }
+
+    initializeEventListeners();
+  } catch (error) {
+    console.error("[main.js/load] Error initializing user:", error);
+    showElement("start");
+  }
 });
 
 socket.on("updateLockCount", ({ lockedCount, playersCount }) => {
@@ -434,6 +503,17 @@ socket.on("playerJoined", ({ gameCode, names, playersCount }) => {
 
 socket.on("startGame", ({ gameCode, names, rankingTerm, playersCount }) => {
   initializeGame(gameCode, names, rankingTerm, playersCount);
+});
+
+socket.on("startNewRound", ({ names, rankingTerm }) => {
+  console.log(
+    `[main.js/socket.on('startNewRound')] Starting new round with term: ${rankingTerm}`,
+  );
+  hideElement("result");
+  showElement("game");
+  updateTextContent("rankingLabel", `Who is the most ${rankingTerm}?`);
+  initializeSortableList(names);
+  updateTextContent("lockCount", "0 / X votes cast");
 });
 
 function displayFinalResults(finalResults, personalRankings, rankingTerm) {
@@ -515,15 +595,5 @@ socket.on(
     }
   },
 );
-
-socket.on("startNewRound", ({ names, rankingCriteria }) => {
-  console.log(
-    `[main.js/socket.on('startNewRound')] Starting new round with criteria: ${rankingCriteria}`,
-  );
-  hideElement("result");
-  showElement("game");
-  updateTextContent("rankingLabel", `Who is the most ${rankingCriteria}?`);
-  initializeSortableList(names);
-});
 
 console.log("[main.js] Script execution completed");

@@ -1,63 +1,68 @@
-<!DOCTYPE html>
+<!doctype html>
 <html lang="en">
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Force Rank</title>
-    <link rel="stylesheet" href="style.css">
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/socket.io/4.7.5/socket.io.js"></script>
-    <script src="https://cdn.jsdelivr.net/npm/sortablejs@1.15.2/Sortable.min.js"></script>
-    <script type="module" src="main.js"></script>
-</head>
-<body>
-    <div id="start">
-        <h1>Force Rank</h1>
-        <button id="createGameButton">Start Game</button>
-        <button id="joinGameButton">Join Game</button>
-    </div>
-
-    <div id="createGame" style="display: none">
-        <h2>Enter player names:</h2>
-        <div id="nameInputs">
-            <input type="text" class="nameInput" placeholder="Enter name">
-            <input type="text" class="nameInput" placeholder="Enter name">
+    <head>
+        <meta charset="UTF-8" />
+        <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+        <title>Force Rank</title>
+        <link rel="stylesheet" href="style.css" />
+        <script src="https://cdnjs.cloudflare.com/ajax/libs/socket.io/4.7.5/socket.io.js"></script>
+        <script src="https://cdn.jsdelivr.net/npm/sortablejs@1.15.2/Sortable.min.js"></script>
+        <script type="module" src="main.js"></script>
+    </head>
+    <body>
+        <div id="start">
+            <h1>Force Rank</h1>
+            <button id="createGameButton">Start Game</button>
+            <button id="joinGameButton">Join Game</button>
         </div>
-        <button id="submitNamesButton">Submit</button>
-    </div>
 
-    <div id="joinGame" style="display: none">
-        <h2>Enter the game code:</h2>
-        <input type="text" id="gameCodeInput" placeholder="Enter game code">
-        <button id="joinGameSubmitButton">Join</button>
-    </div>
-
-    <div id="waitingRoom" style="display: none">
-        <h2>Waiting Room</h2>
-        <p>Game Code: <span id="waitingRoomGameCode"></span></p>
-        <h3>Players:</h3>
-        <ul id="playersList"></ul>
-        <p id="lockCount"></p>
-        <button id="startGameButton">Start Game</button>
-        <textarea id="invitationText" readonly></textarea>
-    </div>
-
-    <div id="game" style="display: none">
-        <h2 id="rankingLabel"></h2>
-        <div id="rankingContainer">
-            <div id="rankNumbers"></div>
-            <ul id="sortable"></ul>
+        <div id="createGame" style="display: none">
+            <h2>Enter player names:</h2>
+            <div id="nameInputs">
+                <input type="text" class="nameInput" placeholder="Enter name" />
+                <input type="text" class="nameInput" placeholder="Enter name" />
+            </div>
+            <button id="submitNamesButton">Submit</button>
         </div>
-        <button id="lockButton">Lock It In</button>
-    </div>
 
-    <div id="waitingForVotes" style="display: none;">
-        <h2>Waiting for Votes</h2>
-        <p id="waitingVotesText"></p>
-    </div>
+        <div id="joinGame" style="display: none">
+            <h2>Enter the game code:</h2>
+            <input
+                type="text"
+                id="gameCodeInput"
+                placeholder="Enter game code"
+            />
+            <button id="joinGameSubmitButton">Join</button>
+        </div>
 
-    <div id="result" style="display: none;">
-        <h2 id="resultLabel"></h2>
-        <ul id="finalResults"></ul>
-    </div>
-</body>
+        <div id="waitingRoom" style="display: none">
+            <h2>Waiting Room</h2>
+            <p>Game Code: <span id="waitingRoomGameCode"></span></p>
+            <h3>Players:</h3>
+            <ul id="playersList"></ul>
+            <p id="lockCount"></p>
+            <button id="startGameButton">Start Game</button>
+            <textarea id="invitationText" readonly></textarea>
+        </div>
+
+        <div id="game" style="display: none">
+            <h2 id="rankingLabel"></h2>
+            <div id="rankingContainer">
+                <div id="rankNumbers"></div>
+                <ul id="sortable"></ul>
+            </div>
+            <button id="lockButton">Lock It In</button>
+        </div>
+
+        <div id="waitingForVotes" style="display: none">
+            <h2>Waiting for Votes</h2>
+            <p id="waitingVotesText"></p>
+        </div>
+
+        <div id="result" style="display: none;">
+            <h2 id="resultLabel"></h2>
+            <table id="resultTable"></table>
+            <button id="nextButton" style="display: none;">Next Ranking</button>
+        </div>
+    </body>
 </html>
