@@ -47,74 +47,34 @@ function handleCreateGame(socket, io) {
 
         const db = admin.database();
         const gameRef = db.ref(`games/${gameCode}`);
-        console.log(
-            `[validation.js/createGame] Firebase ref created for gameCode: ${gameCode}`,
-        );
 
-        // Write user to Firebase
-        writeUserToFirebase(userId)
+        gameRef
+            .set({
+                names,
+                creator: userId,
+                players: { [userId]: { state: "Waiting" } },
+                playersCount: 1,
+                completed: 0,
+                version: 0,
+                state: "waiting",
+            })
             .then(() => {
-                gameRef
-                    .set({
-                        names,
-                        creator: userId,
-                        players: { [userId]: { state: "Waiting" } },
-                        playersCount: 1,
-                        completed: 0,
-                        version: 0,
-                        state: "waiting",
-                    })
-                    .then(() => {
-                        console.log(
-                            `[validation.js/createGame] Game created with data: ${JSON.stringify(
-                                {
-                                    names,
-                                    creator: userId,
-                                    players: { [userId]: { state: "Waiting" } },
-                                    playersCount: 1,
-                                    completed: 0,
-                                    version: 0,
-                                    state: "waiting",
-                                },
-                            )}`,
-                        );
-
-                        socket.join(gameCode);
-                        console.log(
-                            `[validation.js/createGame] Socket joined room: ${gameCode}`,
-                        );
-
-                        io.to(gameCode).emit("gameJoined", {
-                            gameCode,
-                            names,
-                            playersCount: 1,
-                        });
-                        console.log(
-                            `[validation.js/createGame] Emitted 'gameJoined' event to room ${gameCode} with data: ${JSON.stringify(
-                                {
-                                    gameCode,
-                                    names,
-                                    playersCount: 1,
-                                },
-                            )}`,
-                        );
-
-                        socket.emit("joinedWaitingRoom", {
-                            gameCode,
-                            names,
-                            playersCount: 1,
-                            isCreator: true,
-                        });
-                    })
-                    .catch((error) => {
-                        console.error(
-                            `[validation.js/createGame] Error creating game: ${error}`,
-                        );
-                    });
+                socket.join(gameCode);
+                io.to(gameCode).emit("gameJoined", {
+                    gameCode,
+                    names,
+                    playersCount: 1,
+                });
+                socket.emit("joinedWaitingRoom", {
+                    gameCode,
+                    names,
+                    playersCount: 1,
+                    isCreator: true,
+                });
             })
             .catch((error) => {
                 console.error(
-                    `[validation.js/socket.on('createGame')] Error writing user to Firebase: ${error}`,
+                    `[validation.js/createGame] Error creating game: ${error}`,
                 );
             });
     });
@@ -128,78 +88,45 @@ function handleJoinGame(socket, io) {
 
         const db = admin.database();
         const gameRef = db.ref(`games/${gameCode}`);
-        console.log(
-            `[validation.js/joinGame] Firebase ref created for gameCode: ${gameCode}`,
-        );
 
-        // Write user to Firebase
-        writeUserToFirebase(userId)
-            .then(() => {
+        gameRef.once("value").then((snapshot) => {
+            const gameData = snapshot.val() || {};
+
+            if (!gameData.players || !gameData.players[userId]) {
+                const newPlayersCount = (gameData.playersCount || 0) + 1;
+                const playerState =
+                    gameData.state === "voting" ? "Voting" : "Waiting";
+
                 gameRef
-                    .once("value")
-                    .then((snapshot) => {
-                        const gameData = snapshot.val() || {};
-                        console.log(
-                            `[validation.js/joinGame] Fetched game data: ${JSON.stringify(gameData)}`,
-                        );
-
-                        if (!gameData.players || !gameData.players[userId]) {
-                            const newPlayersCount =
-                                (gameData.playersCount || 0) + 1;
-
-                            gameRef
-                                .update({
-                                    [`players/${userId}`]: { state: "Waiting" },
-                                    playersCount: newPlayersCount,
-                                })
-                                .then(() => {
-                                    console.log(
-                                        `[validation.js/joinGame] Updated player count to ${newPlayersCount} for game code: ${gameCode}`,
-                                    );
-
-                                    socket.join(gameCode);
-                                    console.log(
-                                        `[validation.js/joinGame] Socket joined room: ${gameCode}`,
-                                    );
-
-                                    io.to(gameCode).emit("playerJoined", {
-                                        gameCode,
-                                        names: gameData.names,
-                                        playersCount: newPlayersCount,
-                                    });
-
-                                    socket.emit("joinedWaitingRoom", {
-                                        gameCode,
-                                        names: gameData.names,
-                                        playersCount: newPlayersCount,
-                                        isCreator: false,
-                                    });
-                                });
-                        } else {
-                            console.log(
-                                `[validation.js/joinGame] User ${userId} already joined game ${gameCode}`,
-                            );
-
-                            socket.join(gameCode);
-                            socket.emit("joinedWaitingRoom", {
-                                gameCode,
-                                names: gameData.names,
-                                playersCount: gameData.playersCount,
-                                isCreator: false,
-                            });
-                        }
+                    .update({
+                        [`players/${userId}`]: { state: playerState },
+                        playersCount: newPlayersCount,
                     })
-                    .catch((error) => {
-                        console.error(
-                            `[validation.js/joinGame] Error fetching game data: ${error}`,
-                        );
+                    .then(() => {
+                        socket.join(gameCode);
+                        io.to(gameCode).emit("playerJoined", {
+                            gameCode,
+                            names: gameData.names,
+                            playersCount: newPlayersCount,
+                        });
+
+                        socket.emit("joinedWaitingRoom", {
+                            gameCode,
+                            names: gameData.names,
+                            playersCount: newPlayersCount,
+                            isCreator: gameData.creator === userId,
+                        });
                     });
-            })
-            .catch((error) => {
-                console.error(
-                    `[validation.js/socket.on('joinGame')] Error writing user to Firebase: ${error}`,
-                );
-            });
+            } else {
+                socket.join(gameCode);
+                socket.emit("joinedWaitingRoom", {
+                    gameCode,
+                    names: gameData.names,
+                    playersCount: gameData.playersCount,
+                    isCreator: gameData.creator === userId,
+                });
+            }
+        });
     });
 }
 

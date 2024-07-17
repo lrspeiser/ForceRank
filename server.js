@@ -130,51 +130,41 @@ io.on("connection", (socket) => {
 
 // Endpoint to check if a user exists in Firebase
 app.get("/checkUser/:userId", (req, res) => {
-    const userId = req.params.userId;
-    console.log(
-        `[server.js/checkUser] Checking if user exists in Firebase: ${userId}`,
-    );
+  const userId = req.params.userId;
+  console.log(`[server.js/checkUser] Checking if user exists in Firebase: ${userId}`);
 
-    admin
-        .database()
-        .ref(`Users/${userId}`)
-        .once("value")
-        .then((snapshot) => {
-            const exists = snapshot.exists();
-            console.log(
-                `[server.js/checkUser] User ${userId} exists: ${exists}`,
-            );
-            res.json({ exists });
-        })
-        .catch((error) => {
-            console.error(
-                `[server.js/checkUser] Error checking user in Firebase: ${error}`,
-            );
-            res.status(500).json({ error: "Error checking user" });
-        });
+  admin
+    .database()
+    .ref(`Users/${userId}`)
+    .once("value")
+    .then((snapshot) => {
+      const exists = snapshot.exists();
+      console.log(`[server.js/checkUser] User ${userId} exists: ${exists}`);
+      res.json({ exists });
+    })
+    .catch((error) => {
+      console.error(`[server.js/checkUser] Error checking user in Firebase: ${error}`);
+      res.status(500).json({ error: "Error checking user" });
+    });
 });
 
 // Endpoint to write user UUID to Firebase
 app.post("/writeUser", (req, res) => {
-    const userId = req.body.userId;
-    console.log(`[server.js/writeUser] Writing user to Firebase: ${userId}`);
+  const userId = req.body.userId;
+  console.log(`[server.js/writeUser] Writing user to Firebase: ${userId}`);
 
-    admin
-        .database()
-        .ref(`Users/${userId}`)
-        .set({ userId: userId })
-        .then(() => {
-            console.log(
-                `[server.js/writeUser] Successfully wrote user to Firebase: ${userId}`,
-            );
-            res.status(200).send("User written to Firebase");
-        })
-        .catch((error) => {
-            console.error(
-                `[server.js/writeUser] Error writing user to Firebase: ${error}`,
-            );
-            res.status(500).send("Error writing user to Firebase");
-        });
+  admin
+    .database()
+    .ref(`Users/${userId}`)
+    .set({ userId: userId })
+    .then(() => {
+      console.log(`[server.js/writeUser] Successfully wrote user to Firebase: ${userId}`);
+      res.status(200).send("User written to Firebase");
+    })
+    .catch((error) => {
+      console.error(`[server.js/writeUser] Error writing user to Firebase: ${error}`);
+      res.status(500).send("Error writing user to Firebase");
+    });
 });
 
 // Endpoint to log button click
@@ -199,6 +189,29 @@ app.post("/logClick", (req, res) => {
             console.error(`[server.js] Error logging click: ${error}`);
             res.status(500).send("Error logging click");
         });
+});
+
+app.get("/checkUserAndGame/:userId/:gameCode", (req, res) => {
+  const userId = req.params.userId;
+  const gameCode = req.params.gameCode;
+  console.log(`[server.js/checkUserAndGame] Checking user ${userId} and game ${gameCode}`);
+
+  const db = admin.database();
+  const userRef = db.ref(`Users/${userId}`);
+  const gameRef = db.ref(`games/${gameCode}`);
+
+  Promise.all([userRef.once("value"), gameRef.once("value")])
+    .then(([userSnapshot, gameSnapshot]) => {
+      const userExists = userSnapshot.exists();
+      const gameExists = gameSnapshot.exists();
+      const gameState = gameExists ? gameSnapshot.val().state : null;
+      console.log(`[server.js/checkUserAndGame] User exists: ${userExists}, Game exists: ${gameExists}, Game state: ${gameState}`);
+      res.json({ userExists, gameExists, gameState });
+    })
+    .catch((error) => {
+      console.error(`[server.js/checkUserAndGame] Error checking user and game: ${error}`);
+      res.status(500).json({ error: "Error checking user and game" });
+    });
 });
 
 // Start the HTTP server and listen on the specified port
