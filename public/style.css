@@ -1,14 +1,17 @@
+@import url('https://fonts.googleapis.com/css2?family=Varela+Round&display=swap');
+
 body {
-  font-family: 'Orbitron', Arial, sans-serif;
-  background-color: #4B0082; /* Dark purple background */
-  color: #FFFFFF; /* White text */
+  font-family: 'Varela Round', sans-serif;
+  background-color: #4B0082;
+  color: #FFFFFF;
   display: flex;
   flex-direction: column;
   align-items: center;
   justify-content: center;
-  height: 100vh;
+  min-height: 100vh;
   margin: 0;
   text-align: center;
+  font-size: 18px; /* Increased base font size */
 }
 
 #start, #createGame, #joinGame, #waitingRoom, #game, #result {
@@ -16,10 +19,12 @@ body {
   flex-direction: column;
   align-items: center;
   padding: 20px;
-  border: 2px solid #FFD700; /* Gold border */
-  background-color: #6A0DAD; /* Purple background */
+  border: 2px solid #FFD700;
+  background-color: #6A0DAD;
   border-radius: 10px;
   box-shadow: 0 0 10px rgba(0, 0, 0, 0.5);
+  width: 90%;
+  max-width: 600px;
 }
 
 #start {
@@ -27,17 +32,20 @@ body {
 }
 
 #dragContainer {
-  margin: 20px;
+  width: 100%;
+  margin: 20px 0;
 }
 
-#sortable {
+#sortable, #playersList, #finalResults {
   list-style-type: none;
   padding: 0;
+  width: 100%;
 }
 
 .sortable-item {
   display: flex;
   align-items: center;
+  justify-content: space-between;
 }
 
 .rank-number {
@@ -45,79 +53,65 @@ body {
   font-weight: bold;
 }
 
-#sortable li {
-  margin: 5px 0; /* Reduced margin */
-  padding: 10px; /* Adjusted padding */
-  border: 2px solid #FFD700; /* Gold border */
-  background-color: #8A2BE2; /* Blue-violet background */
-  color: #FFFFFF; /* White text */
-  font-family: 'Open Sans', sans-serif; /* More readable font */
+#sortable li, #playersList li, #finalResults li {
+  margin: 5px 0;
+  padding: 12px; /* Slightly increased padding */
+  border: 2px solid #FFD700;
+  background-color: #8A2BE2;
+  color: #FFFFFF;
   cursor: grab;
   border-radius: 5px;
   transition: background-color 0.3s;
+  font-size: 20px; /* Increased font size */
 }
 
 #sortable li:hover {
-  background-color: #7B68EE; /* Medium slate blue */
+  background-color: #7B68EE;
 }
 
 #sortable li.dragging {
-  background-color: #9370DB; /* Medium purple */
-}
-
-#playersList, #finalResults {
-  list-style-type: none;
-  padding: 0;
-}
-
-#playersList li, #finalResults li {
-  margin: 5px 0;
-  padding: 10px;
-  border: 1px solid #FFD700; /* Gold border */
-  background-color: #8A2BE2; /* Blue-violet background */
-  color: #FFFFFF; /* White text */
-  font-family: 'Open Sans', sans-serif; /* More readable font */
-  border-radius: 5px;
+  background-color: #9370DB;
 }
 
 #invitationText {
-  width: 80%;
-  height: 60px;
-  padding: 10px;
-  margin: 10px 0;
+  width: 100%;
+  height: 70px; /* Slightly increased height */
+  padding: 12px;
+  margin: 12px 0;
   border: 2px solid #FFD700;
   background-color: #6A0DAD;
   color: #FFFFFF;
-  font-family: 'Open Sans', sans-serif;
+  font-family: 'Varela Round', sans-serif;
   border-radius: 5px;
   resize: none;
+  font-size: 18px; /* Increased font size */
 }
 
 button {
-  background-color: #FFD700; /* Gold background */
-  color: #4B0082; /* Dark purple text */
-  font-family: 'Orbitron', Arial, sans-serif;
-  padding: 15px 30px; /* Increased padding */
-  margin: 10px; /* Added margin for better spacing */
+  background-color: #FFD700;
+  color: #4B0082;
+  font-family: 'Varela Round', sans-serif;
+  padding: 16px 32px; /* Increased padding */
+  margin: 12px;
   border: none;
   border-radius: 5px;
   cursor: pointer;
   transition: background-color 0.3s;
+  font-size: 20px; /* Increased font size */
 }
 
 button:hover {
-  background-color: #FFDF00; /* Bright gold */
+  background-color: #FFDF00;
 }
 
 button.button-a {
-  border: none;
   background-color: #F891B3;
   color: #fff;
-  padding: 10px 20px;
-  font-size: 20px;
-  width: 200px;
+  padding: 12px 24px;
+  font-size: 22px; /* Increased font size */
+  width: 220px; /* Slightly increased width */
   border-radius: 10px;
-  margin: auto;
+  margin: 12px auto;
   position: relative;
   box-shadow: 5px 5px 5px #FBC1D4;
   transition: all 0.3s ease;
@@ -125,28 +119,30 @@ button.button-a {
 
 button.button-a:hover {
   box-shadow: 0px 2px 20px #A20A3C;
-  top: 3px;
+  transform: translateY(3px);
 }
 
 button.button-a:active {
   box-shadow: none;
-  top: 5px;
+  transform: translateY(5px);
 }
 
 #nameInputs {
   display: flex;
   flex-direction: column;
-  gap: 10px;
-  margin-bottom: 20px;
+  gap: 12px;
+  margin-bottom: 24px;
+  width: 100%;
 }
 
 .nameInput {
-  padding: 10px;
-  font-size: 16px;
+  padding: 12px;
+  font-size: 18px; /* Increased font size */
   border: 2px solid #FFD700;
   background-color: #6A0DAD;
   color: #FFFFFF;
   border-radius: 5px;
+  font-family: 'Varela Round', sans-serif;
 }
 
 .nameInput::placeholder {
@@ -156,56 +152,82 @@ button.button-a:active {
 #rankingContainer {
   display: flex;
   align-items: stretch;
+  width: 100%;
 }
 
 #rankNumbers {
   display: flex;
   flex-direction: column;
   justify-content: space-around;
-  margin-right: 10px;
+  margin-right: 12px;
 }
 
 .rank-number {
   font-weight: bold;
-  padding: 10px 5px;
+  padding: 12px 6px;
+  font-size: 20px; /* Increased font size */
 }
 
 #sortable {
   flex-grow: 1;
-  list-style-type: none;
-  padding: 0;
   margin: 0;
 }
 
-.sortable-item {
-  margin: 5px 0;
-  padding: 10px;
-  background-color: #8A2BE2;
-  color: #FFFFFF;
-  cursor: grab;
-  border-radius: 5px;
-}
-
 #finalResults {
-  display: flex;
-  flex-direction: column;
+  width: 100%;
 }
 
 .result-row {
   display: flex;
-  margin: 5px 0;
+  margin: 6px 0;
+  width: 100%;
 }
 
 .result-rank {
-  width: 30px;
+  width: 36px;
   font-weight: bold;
 }
 
 .result-group, .result-personal {
   flex: 1;
-  padding: 5px 10px;
+  padding: 6px 12px;
   background-color: #8A2BE2;
   color: #FFFFFF;
-  margin: 0 5px;
+  margin: 0 6px;
   border-radius: 5px;
+}
+
+table {
+  width: 100%;
+  border-collapse: collapse;
+  margin-top: 24px;
+}
+
+th, td {
+  border: 1px solid #FFD700;
+  padding: 12px;
+  text-align: center;
+  font-size: 20px; /* Increased font size */
+}
+
+th {
+  background-color: #8A2BE2;
+}
+
+/* Center the "Lock it in" button */
+#lockButton {
+  display: block;
+  margin: 20px auto;
+}
+
+/* Increase font size for headings */
+h1, h2, h3 {
+  font-size: 28px; /* Larger font size for headings */
+  margin-bottom: 20px;
+}
+
+/* Ensure all buttons are centered */
+#start button, #createGame button, #joinGame button, #waitingRoom button, #game button, #result button {
+  display: block;
+  margin: 15px auto;
 }

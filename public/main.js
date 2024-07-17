@@ -19,7 +19,7 @@ function logFetchCall(url, options) {
   );
 }
 
-function getRankings() {
+export function getRankings() {
   const sortableItems = document.querySelectorAll("#sortable li");
   return Array.from(sortableItems).map((item, index) => ({
     name: item.textContent,
