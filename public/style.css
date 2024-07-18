@@ -242,3 +242,9 @@ h1, h2, h3 {
 #endGameButton:hover, #stopWaitingButton:hover {
   background-color: #FF725C;
 }
+
+.subheader {
+  font-size: 18px; /* Slightly smaller font size */
+  margin-top: -15px; /* Adjust the spacing above the subheader */
+  margin-bottom: 30px; /* Adjust the spacing below the subheader */
+}
