@@ -100,12 +100,14 @@ function handleRejoinGame(socket, io) {
                     });
                     break;
                 case "completed":
-                    // Emit final results
-                    const finalResults = calculateFinalResults(
+                    // Calculate final results
+                    const { groupRanking, playerVotes } = calculateFinalResults(
                         gameData.rankings,
+                        gameData.creator,
                     );
                     socket.emit("displayFinalResults", {
-                        finalResults,
+                        groupRanking,
+                        playerVotes,
                         rankingTerm: gameData.rankingTerm,
                     });
                     break;
@@ -220,7 +222,7 @@ function calculateFinalResults(allRankings, creatorId) {
     }
 
     // Sort names by total score (ascending)
-    let sortedNames = Object.entries(totalScores)
+    let groupRanking = Object.entries(totalScores)
         .sort(([nameA, scoreA], [nameB, scoreB]) => {
             if (scoreA === scoreB) {
                 // Use creator's vote as tiebreaker
@@ -236,7 +238,7 @@ function calculateFinalResults(allRankings, creatorId) {
         })
         .map(([name], index) => ({ name, rank: index + 1 }));
 
-    return { groupRanking: sortedNames, playerVotes };
+    return { groupRanking, playerVotes };
 }
 
 // This function handles submitting the rankings for a user
@@ -385,6 +387,55 @@ function handleNextRanking(socket, io) {
     });
 }
 
+// This function handles ending the game
+function handleEndGame(socket, io) {
+    socket.on("endGame", ({ gameCode, userId }) => {
+        console.log(`[gameplay.js/handleEndGame] Ending game: ${gameCode}, User ID: ${userId}`);
+
+        const db = admin.database();
+        const gameRef = db.ref(`games/${gameCode}`);
+
+        gameRef.once("value").then((snapshot) => {
+            const gameData = snapshot.val();
+            if (gameData && gameData.creator === userId) {
+                gameRef.remove().then(() => {
+                    io.to(gameCode).emit("gameEnded");
+                    console.log(`[gameplay.js/handleEndGame] Game ${gameCode} ended and removed from database`);
+                }).catch((error) => {
+                    console.error(`[gameplay.js/handleEndGame] Error removing game from database: ${error}`);
+                });
+            } else {
+                console.log(`[gameplay.js/handleEndGame] User ${userId} is not the creator of game ${gameCode}`);
+            }
+        });
+    });
+}
+
+// This function handles stopping the waiting for votes
+function handleStopWaiting(socket, io) {
+    socket.on("stopWaiting", ({ gameCode, userId }) => {
+        console.log(`[gameplay.js/handleStopWaiting] Stopping wait for game: ${gameCode}, User ID: ${userId}`);
+
+        const db = admin.database();
+        const gameRef = db.ref(`games/${gameCode}`);
+
+        gameRef.once("value").then((snapshot) => {
+            const gameData = snapshot.val();
+            if (gameData && gameData.creator === userId) {
+                const { groupRanking, playerVotes } = calculateFinalResults(gameData.rankings, gameData.creator);
+                io.to(gameCode).emit("displayFinalResults", {
+                    groupRanking,
+                    playerVotes,
+                    rankingTerm: gameData.rankingTerm,
+                });
+                gameRef.update({ state: "completed" });
+                console.log(`[gameplay.js/handleStopWaiting] Forced display of final results for game ${gameCode}`);
+            } else {
+                console.log(`[gameplay.js/handleStopWaiting] User ${userId} is not the creator of game ${gameCode}`);
+            }
+        });
+    });
+}
 
 
 module.exports = {
@@ -394,4 +445,6 @@ module.exports = {
     handleNextRanking,
     handleRejoinGame,
     handleLockRankings,
+    handleEndGame,
+    handleStopWaiting,
 };

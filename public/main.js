@@ -13,12 +13,6 @@ console.log("[main.js] Import statements executed");
 const socket = io();
 console.log("[main.js] Socket initialized");
 
-function logFetchCall(url, options) {
-  console.log(
-    `[main.js/logFetchCall] Fetch call being made to: ${url} with options: ${JSON.stringify(options)}`,
-  );
-}
-
 export function getRankings() {
   const sortableItems = document.querySelectorAll("#sortable li");
   return Array.from(sortableItems).map((item, index) => ({
@@ -39,51 +33,51 @@ function logLocalStorageContents() {
   }
 }
 
-function initializeGame(gameCode, names, rankingTerm, playersCount) {
-  console.log(
-    `[main.js/initializeGame] Initializing game: ${gameCode}, Players: ${playersCount}`,
-  );
-  hideElement("waitingRoom");
-  showElement("game");
-  updateTextContent("rankingLabel", `Who is the most ${rankingTerm}?`);
-
-  const rankNumbers = document.getElementById("rankNumbers");
-  rankNumbers.innerHTML = names
-    .map((_, index) => `<div class="rank-number">${index + 1}</div>`)
-    .join("");
-
-  initializeSortableList(names);
+function updateInvitationText(gameCode, names) {
+  const invitationText = `Hey player, help me Force Rank ${names.join(
+    ", ",
+  )}. Go to http://forcerank.replit.app/?gameid=${gameCode}`;
+  const invitationTextElement = document.getElementById("invitationText");
+  if (invitationTextElement) {
+    invitationTextElement.value = invitationText;
+    console.log(
+      `[main.js/updateInvitationText] Updated invitation text for game: ${gameCode}`,
+    );
+  } else {
+    console.error(
+      "[main.js/updateInvitationText] Invitation text element not found",
+    );
+  }
 }
 
-function initializeSortableList(names) {
-  const sortableList = document.getElementById("sortable");
-  sortableList.innerHTML = names
-    .map((name) => `<li class="sortable-item">${name}</li>`)
-    .join("");
+const endGameButton = document.getElementById("endGameButton");
+const stopWaitingButton = document.getElementById("stopWaitingButton");
 
-  new Sortable(sortableList, {
-    animation: 150,
-    ghostClass: "sortable-ghost",
-    onEnd: () => {
-      const updatedRankings = getRankings();
-      const gameCode = localStorage.getItem("gameCode");
-      const userId = localStorage.getItem("userId");
-      socket.emit("updateRankings", {
-        gameCode,
-        userId,
-        rankings: updatedRankings,
-      });
-    },
+if (endGameButton) {
+  endGameButton.addEventListener("click", () => {
+    console.log("[main.js/endGameButton.click] End Game button clicked");
+    const gameCode = localStorage.getItem("gameCode");
+    const userId = localStorage.getItem("userId");
+    if (gameCode && userId) {
+      console.log(`[main.js/endGameButton.click] Ending game: ${gameCode}`);
+      socket.emit("endGame", { gameCode, userId });
+    }
   });
+}
 
-  // Emit initial rankings
-  const initialRankings = getRankings();
-  const gameCode = localStorage.getItem("gameCode");
-  const userId = localStorage.getItem("userId");
-  socket.emit("updateRankings", {
-    gameCode,
-    userId,
-    rankings: initialRankings,
+if (stopWaitingButton) {
+  stopWaitingButton.addEventListener("click", () => {
+    console.log(
+      "[main.js/stopWaitingButton.click] Stop Waiting button clicked",
+    );
+    const gameCode = localStorage.getItem("gameCode");
+    const userId = localStorage.getItem("userId");
+    if (gameCode && userId) {
+      console.log(
+        `[main.js/stopWaitingButton.click] Stopping wait for game: ${gameCode}`,
+      );
+      socket.emit("stopWaiting", { gameCode, userId });
+    }
   });
 }
 
@@ -102,35 +96,44 @@ socket.on(
   ({ groupRanking, playerVotes, rankingTerm }) => {
     console.log(
       "[main.js/socket.on('displayFinalResults')] Displaying final results",
+      { groupRanking, playerVotes, rankingTerm },
     );
     hideElement("game");
     hideElement("waitingForVotes");
     showElement("result");
 
     const userId = localStorage.getItem("userId");
-    const userVotes = playerVotes[userId];
+    const userVotes =
+      playerVotes && playerVotes[userId] ? playerVotes[userId] : [];
 
     const resultTable = document.getElementById("resultTable");
     if (resultTable) {
-      resultTable.innerHTML = `
-            <tr>
-                <th>Rank</th>
-                <th>Group Vote</th>
-                <th>Your Vote</th>
-            </tr>
-            ${groupRanking
-              .map(({ name, rank }) => {
-                const userVote = userVotes.find((v) => v.rank === rank).name;
-                return `
-                    <tr>
-                        <td>${rank}</td>
-                        <td>${name}</td>
-                        <td>${userVote}</td>
-                    </tr>
-                `;
-              })
-              .join("")}
-        `;
+      if (groupRanking && groupRanking.length > 0) {
+        resultTable.innerHTML = `
+                <tr>
+                    <th>Rank</th>
+                    <th>Group Vote</th>
+                    <th>Your Vote</th>
+                </tr>
+                ${groupRanking
+                  .map(({ name, rank }) => {
+                    const userVote = userVotes.find((v) => v.name === name) || {
+                      rank: "N/A",
+                    };
+                    return `
+                        <tr>
+                            <td>${rank}</td>
+                            <td>${name}</td>
+                            <td>${userVote.rank}</td>
+                        </tr>
+                    `;
+                  })
+                  .join("")}
+            `;
+      } else {
+        resultTable.innerHTML =
+          "<tr><td colspan='3'>No results available</td></tr>";
+      }
     } else {
       console.error(
         "[main.js/socket.on('displayFinalResults')] Result table element not found",
@@ -141,18 +144,23 @@ socket.on(
 
     // Show next button only for the creator
     const nextButton = document.getElementById("nextButton");
+    const endGameButton = document.getElementById("endGameButton");
     const isCreator = localStorage.getItem("isCreator") === "true";
     console.log(
       `[main.js/socket.on('displayFinalResults')] Is creator: ${isCreator}`,
     );
-    if (nextButton) {
+    if (nextButton && endGameButton) {
       nextButton.style.display = isCreator ? "block" : "none";
+      endGameButton.style.display = isCreator ? "block" : "none";
       console.log(
         `[main.js/socket.on('displayFinalResults')] Next button display: ${nextButton.style.display}`,
       );
+      console.log(
+        `[main.js/socket.on('displayFinalResults')] End Game button display: ${endGameButton.style.display}`,
+      );
     } else {
       console.error(
-        "[main.js/socket.on('displayFinalResults')] Next button element not found",
+        "[main.js/socket.on('displayFinalResults')] Next button or End Game button element not found",
       );
     }
   },
@@ -168,7 +176,6 @@ function initializeEventListeners() {
   const startGameButton = document.getElementById("startGameButton");
   const lockButton = document.getElementById("lockButton");
   const createGameDiv = document.getElementById("createGame");
-  const nameInputsContainer = document.getElementById("nameInputs");
   const nextButton = document.getElementById("nextButton");
 
   if (nextButton) {
@@ -182,8 +189,8 @@ function initializeEventListeners() {
         );
         socket.emit("nextRanking", { gameCode, userId });
       } else {
-        console.log(
-          "[main.js/nextButton.click] Error: No game code or userId found in local storage",
+        console.error(
+          "[main.js/nextButton.click] Game code or user ID not found in local storage",
         );
       }
     });
@@ -297,6 +304,56 @@ function initializeEventListeners() {
   console.log("[main.js/initializeEventListeners] Event listeners set up");
 }
 
+socket.on("startNewRound", ({ names, rankingTerm }) => {
+  console.log(
+    `[main.js/socket.on('startNewRound')] Starting new round with term: ${rankingTerm}`,
+  );
+  hideElement("result");
+  showElement("game");
+  updateTextContent("rankingLabel", `Who is the most ${rankingTerm}?`);
+
+  const sortableList = document.getElementById("sortable");
+  if (sortableList) {
+    // Destroy existing Sortable instance if it exists
+    if (sortableList.sortable) {
+      sortableList.sortable.destroy();
+    }
+
+    // Reinitialize the list
+    sortableList.innerHTML = names
+      .map((name) => `<li class="sortable-item">${name}</li>`)
+      .join("");
+
+    // Reinitialize Sortable
+    new Sortable(sortableList, {
+      animation: 150,
+      ghostClass: "sortable-ghost",
+      onEnd: () => {
+        const updatedRankings = Array.from(sortableList.children).map(
+          (li, index) => ({
+            name: li.textContent,
+            rank: index + 1,
+          }),
+        );
+        const gameCode = localStorage.getItem("gameCode");
+        const userId = localStorage.getItem("userId");
+        socket.emit("updateRankings", {
+          gameCode,
+          userId,
+          rankings: updatedRankings,
+        });
+      },
+    });
+  } else {
+    console.error(
+      "[main.js/socket.on('startNewRound')] Sortable list element not found",
+    );
+  }
+
+  // Reset lock count
+  updateTextContent("lockCount", "0 / X votes cast");
+});
+
 socket.on("gameJoined", ({ gameCode, names, playersCount }) => {
   console.log(
     `[main.js/socket.on('gameJoined')] Game joined: ${gameCode}, Players: ${playersCount}`,
@@ -306,24 +363,60 @@ socket.on("gameJoined", ({ gameCode, names, playersCount }) => {
   showElement("waitingRoom");
   updateTextContent("waitingRoomGameCode", gameCode);
   updatePlayersList(names);
-  const invitationText = `Hey player, help me Force Rank ${names.join(
-    ", ",
-  )}. Go to http://forcerank.replit.app/?gameid=${gameCode}`;
-  document.getElementById("invitationText").value = invitationText;
+  updateInvitationText(gameCode, names);
   console.log(
     `[main.js/socket.on('gameJoined')] Updated waiting room with game code and player list`,
   );
 });
 
-socket.on("refreshRanking", ({ names, rankingCriteria }) => {
+socket.on("refreshRanking", ({ names, rankingTerm }) => {
   console.log(
     `[main.js/socket.on('refreshRanking')] Refreshing ranking for new round`,
+    { names, rankingTerm },
   );
   hideElement("result");
   showElement("game");
-  updateTextContent("topLabel", rankingCriteria[1]);
-  updateTextContent("bottomLabel", rankingCriteria[2]);
-  initializeSortableList(names);
+  updateTextContent("rankingLabel", `Who is the most ${rankingTerm}?`);
+
+  const sortableList = document.getElementById("sortable");
+  if (sortableList) {
+    // Destroy existing Sortable instance if it exists
+    if (sortableList.sortable) {
+      sortableList.sortable.destroy();
+    }
+
+    // Reinitialize the list
+    sortableList.innerHTML = names
+      .map((name) => `<li class="sortable-item">${name}</li>`)
+      .join("");
+
+    // Reinitialize Sortable
+    new Sortable(sortableList, {
+      animation: 150,
+      ghostClass: "sortable-ghost",
+      onEnd: () => {
+        const updatedRankings = Array.from(sortableList.children).map(
+          (li, index) => ({
+            name: li.textContent,
+            rank: index + 1,
+          }),
+        );
+        const gameCode = localStorage.getItem("gameCode");
+        const userId = localStorage.getItem("userId");
+        socket.emit("updateRankings", {
+          gameCode,
+          userId,
+          rankings: updatedRankings,
+        });
+      },
+    });
+  } else {
+    console.error(
+      "[main.js/socket.on('refreshRanking')] Sortable list element not found",
+    );
+  }
+
+  updateTextContent("lockCount", "0 / X votes cast");
 });
 
 function handleNameInput(inputElement) {
@@ -421,39 +514,74 @@ function generateNewUserId() {
   });
 }
 
-function checkUserAndGame(userId, gameCode) {
-  return fetch(`/checkUserAndGame/${userId}/${gameCode || "noGame"}`)
-    .then((response) => response.json())
-    .then((data) => data)
-    .catch((error) => {
-      console.error("[main.js/checkUserAndGame] Error:", error);
-      return { userExists: false, gameExists: false, gameState: null };
-    });
-}
+async function handlePageRefresh() {
+  const userId = localStorage.getItem("userId");
+  const gameCode = localStorage.getItem("gameCode");
 
-function checkUserInFirebase(userId) {
-  return fetch(`/checkUser/${userId}`)
-    .then((response) => response.json())
-    .then((data) => data.exists)
-    .catch((error) => {
-      console.error("[main.js/checkUserInFirebase] Error:", error);
-      return false;
-    });
-}
+  // Hide all screens initially
+  hideElement("start");
+  hideElement("createGame");
+  hideElement("joinGame");
+  hideElement("waitingRoom");
+  hideElement("game");
+  hideElement("result");
 
-function writeUserToFirebase(userId) {
-  return fetch("/writeUser", {
-    method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-    },
-    body: JSON.stringify({ userId }),
-  })
-    .then((response) => response.text())
-    .then((data) => {
-      console.log(`[main.js/writeUserToFirebase] Server response: ${data}`);
-      socket.emit("initUser", { userId });
-    });
+  if (!userId || !gameCode) {
+    console.log(
+      "[main.js/handlePageRefresh] No userId or gameCode found in localStorage. Showing start screen.",
+    );
+    showElement("start");
+    return;
+  }
+
+  console.log(
+    `[main.js/handlePageRefresh] Checking game state for user ${userId} in game ${gameCode}`,
+  );
+
+  try {
+    const response = await fetch(`/checkUserAndGame/${userId}/${gameCode}`);
+    const data = await response.json();
+
+    if (!data.userExists || !data.gameExists) {
+      console.log(
+        `[main.js/handlePageRefresh] User or game not found. Clearing localStorage and showing start screen.`,
+      );
+      localStorage.removeItem("userId");
+      localStorage.removeItem("gameCode");
+      showElement("start");
+      return;
+    }
+
+    console.log(`[main.js/handlePageRefresh] Game state: ${data.gameState}`);
+
+    switch (data.gameState) {
+      case "waiting":
+        console.log("[main.js/handlePageRefresh] Showing waiting room");
+        showElement("waitingRoom");
+        socket.emit("rejoinGame", { gameCode, userId });
+        break;
+      case "voting":
+        console.log("[main.js/handlePageRefresh] Showing voting screen");
+        showElement("game");
+        socket.emit("rejoinGame", { gameCode, userId });
+        break;
+      case "completed":
+        console.log("[main.js/handlePageRefresh] Showing results screen");
+        showElement("result");
+        socket.emit("rejoinGame", { gameCode, userId });
+        break;
+      default:
+        console.log(
+          "[main.js/handlePageRefresh] Unknown game state. Showing start screen.",
+        );
+        showElement("start");
+    }
+  } catch (error) {
+    console.error(
+      `[main.js/handlePageRefresh] Error checking game state: ${error}`,
+    );
+    showElement("start");
+  }
 }
 
 window.addEventListener("load", async () => {
@@ -462,35 +590,41 @@ window.addEventListener("load", async () => {
   logLocalStorageContents();
 
   try {
-    const { userId, gameCode } = await initializeUser();
-    console.log(
-      `[main.js/load] Initialized userId: ${userId}, gameCode: ${gameCode}`,
-    );
-
-    if (gameCode) {
-      console.log(`[main.js/load] Rejoining existing game: ${gameCode}`);
-      socket.emit("rejoinGame", { gameCode, userId });
-    } else {
-      console.log("[main.js/load] No active game found. Showing start screen.");
-      showElement("start");
-    }
-
+    const userId = await initializeUser();
+    console.log(`[main.js/load] Initialized userId: ${userId}`);
+    await handlePageRefresh();
     initializeEventListeners();
   } catch (error) {
-    console.error("[main.js/load] Error initializing user:", error);
+    console.error("[main.js/load] Error handling page load:", error);
     showElement("start");
   }
 });
 
-socket.on("updateLockCount", ({ lockedCount, playersCount }) => {
-  console.log(
-    `[main.js/socket.on('updateLockCount')] Lock count updated: ${lockedCount}/${playersCount}`,
-  );
-  updateTextContent(
-    "waitingVotesText",
-    `${lockedCount}/${playersCount} votes placed`,
-  );
+// Add a new event listener for game ended
+socket.on("gameEnded", () => {
+    console.log("[main.js/socket.on('gameEnded')] Game has ended");
+    localStorage.removeItem("gameCode");
+    localStorage.removeItem("isCreator");
+    hideElement("result");
+    hideElement("waitingForVotes");
+    hideElement("game");
+    hideElement("waitingRoom");
+    showElement("start");
 });
+
+
+socket.on("updateLockCount", ({ lockedCount, playersCount }) => {
+    console.log(`[main.js/socket.on('updateLockCount')] Lock count updated: ${lockedCount}/${playersCount}`);
+    updateTextContent("waitingVotesText", `${lockedCount}/${playersCount} votes placed`);
+
+    const stopWaitingButton = document.getElementById("stopWaitingButton");
+    const isCreator = localStorage.getItem("isCreator") === "true";
+    if (stopWaitingButton) {
+        stopWaitingButton.style.display = isCreator ? "block" : "none";
+    }
+});
+
+
 
 socket.on("playerJoined", ({ gameCode, names, playersCount }) => {
   console.log(
@@ -502,39 +636,53 @@ socket.on("playerJoined", ({ gameCode, names, playersCount }) => {
 });
 
 socket.on("startGame", ({ gameCode, names, rankingTerm, playersCount }) => {
-  initializeGame(gameCode, names, rankingTerm, playersCount);
-});
-
-socket.on("startNewRound", ({ names, rankingTerm }) => {
   console.log(
-    `[main.js/socket.on('startNewRound')] Starting new round with term: ${rankingTerm}`,
+    `[main.js/socket.on('startGame')] Starting game for game code: ${gameCode}`,
+    { names, rankingTerm, playersCount },
   );
-  hideElement("result");
+  localStorage.setItem("gameCode", gameCode);
+  hideElement("waitingRoom");
   showElement("game");
   updateTextContent("rankingLabel", `Who is the most ${rankingTerm}?`);
-  initializeSortableList(names);
-  updateTextContent("lockCount", "0 / X votes cast");
+
+  const sortableList = document.getElementById("sortable");
+  if (sortableList) {
+    // Destroy existing Sortable instance if it exists
+    if (sortableList.sortable) {
+      sortableList.sortable.destroy();
+    }
+
+    // Reinitialize the list
+    sortableList.innerHTML = names
+      .map((name) => `<li class="sortable-item">${name}</li>`)
+      .join("");
+
+    // Reinitialize Sortable
+    new Sortable(sortableList, {
+      animation: 150,
+      ghostClass: "sortable-ghost",
+      onEnd: () => {
+        const updatedRankings = Array.from(sortableList.children).map(
+          (li, index) => ({
+            name: li.textContent,
+            rank: index + 1,
+          }),
+        );
+        const gameCode = localStorage.getItem("gameCode");
+        const userId = localStorage.getItem("userId");
+        socket.emit("updateRankings", {
+          gameCode,
+          userId,
+          rankings: updatedRankings,
+        });
+      },
+    });
+  } else {
+    console.error(
+      "[main.js/socket.on('startGame')] Sortable list element not found",
+    );
+  }
 });
-
-function displayFinalResults(finalResults, personalRankings, rankingTerm) {
-  hideElement("game");
-  showElement("result");
-  updateTextContent("resultLabel", `Results for: Most ${rankingTerm}`);
-
-  const finalResultsContainer = document.getElementById("finalResults");
-  finalResultsContainer.innerHTML = finalResults
-    .map((result, index) => {
-      const personalRank = personalRankings.find((r) => r.name === result.name);
-      return `
-            <div class="result-row">
-                <div class="result-rank">${index + 1}</div>
-                <div class="result-group">${result.name}</div>
-                <div class="result-personal">${personalRank ? personalRank.name : "N/A"}</div>
-            </div>
-        `;
-    })
-    .join("");
-}
 
 socket.on(
   "gameExists",
@@ -588,6 +736,7 @@ socket.on(
     showElement("waitingRoom");
     updateTextContent("waitingRoomGameCode", gameCode);
     updatePlayersList(names);
+    updateInvitationText(gameCode, names);
 
     const startGameButton = document.getElementById("startGameButton");
     if (startGameButton) {

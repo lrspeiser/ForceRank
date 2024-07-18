@@ -1,3 +1,5 @@
+// socketHandlers.js
+
 import { socket } from "./socket.js";
 import {
     showElement,
@@ -7,6 +9,76 @@ import {
 } from "./domUtils.js";
 import { generateGameCode } from "./utils.js";
 
+function hideAllScreens() {
+    hideElement("start");
+    hideElement("createGame");
+    hideElement("joinGame");
+    hideElement("waitingRoom");
+    hideElement("game");
+    hideElement("result");
+}
+
+socket.on("gameNotFound", () => {
+    console.log("[socketHandlers.js/socket.on('gameNotFound')] Game not found");
+    localStorage.removeItem("gameCode");
+    localStorage.removeItem("userId");
+    hideAllScreens();
+    showElement("start");
+});
+
+socket.on(
+    "joinedWaitingRoom",
+    ({ gameCode, names, playersCount, isCreator }) => {
+        console.log(
+            `[socketHandlers.js/socket.on('joinedWaitingRoom')] Joined waiting room for game: ${gameCode}`,
+        );
+        hideAllScreens();
+        showElement("waitingRoom");
+        updateTextContent("waitingRoomGameCode", gameCode);
+        updatePlayersList(names);
+
+        const startGameButton = document.getElementById("startGameButton");
+        if (startGameButton) {
+            startGameButton.style.display = isCreator ? "block" : "none";
+        }
+    },
+);
+
+socket.on("startGame", ({ gameCode, names, rankingTerm, playersCount }) => {
+    console.log(
+        `[socketHandlers.js/socket.on('startGame')] Starting game: ${gameCode}`,
+    );
+    hideAllScreens();
+    showElement("game");
+    updateTextContent("rankingLabel", `Who is the most ${rankingTerm}?`);
+
+    const rankNumbers = document.getElementById("rankNumbers");
+    rankNumbers.innerHTML = names
+        .map((_, index) => `<div class="rank-number">${index + 1}</div>`)
+        .join("");
+
+    initializeSortableList(names);
+});
+
+socket.on("displayFinalResults", ({ finalResults, rankingTerm }) => {
+    console.log(
+        `[socketHandlers.js/socket.on('displayFinalResults')] Displaying final results`,
+    );
+    hideAllScreens();
+    showElement("result");
+    updateTextContent("resultLabel", `Final Results for: Most ${rankingTerm}`);
+
+    const finalResultsContainer = document.getElementById("finalResults");
+    finalResultsContainer.innerHTML = finalResults
+        .map((result, index) => {
+            return `<li>${result.name} - Group Rank: ${result.rank}</li>`;
+        })
+        .join("");
+
+    const nextButton = document.getElementById("nextButton");
+    nextButton.style.display =
+        localStorage.getItem("isCreator") === "true" ? "block" : "none";
+});
 
 // Function to write user UUID to the backend
 const writeUserToBackend = (userId) => {

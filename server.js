@@ -66,6 +66,8 @@ const {
     handleNextRanking, // Function to handle moving to the next ranking round
     handleRejoinGame, // Function to handle rejoining a game
     handleLockRankings,
+    handleEndGame,
+    handleStopWaiting,
 } = require("./gameplay"); // Import from gameplay.js
 
 function initializeUserTerms(userId) {
@@ -119,6 +121,8 @@ io.on("connection", (socket) => {
     handleNextRanking(socket, io); // Attach the next ranking handler
     handleRejoinGame(socket, io); // Attach the rejoin game handler
     handleLockRankings(socket, io); // Attach the lock rankings handler
+    handleEndGame(socket, io);
+    handleStopWaiting(socket, io);
 
     // Set up a disconnect event listener for socket.io
     console.log("[server.js] Setting up socket.io disconnect event listener");
@@ -128,60 +132,107 @@ io.on("connection", (socket) => {
     });
 });
 
+app.get("/checkUserAndGame/:userId/:gameCode", (req, res) => {
+    const userId = req.params.userId;
+    const gameCode = req.params.gameCode;
+    console.log(
+        `[server.js/checkUserAndGame] Checking user ${userId} and game ${gameCode}`,
+    );
+
+    const db = admin.database();
+    const userRef = db.ref(`Users/${userId}`);
+    const gameRef = db.ref(`games/${gameCode}`);
+
+    Promise.all([userRef.once("value"), gameRef.once("value")])
+        .then(([userSnapshot, gameSnapshot]) => {
+            const userExists = userSnapshot.exists();
+            const gameExists = gameSnapshot.exists();
+            const gameState = gameExists ? gameSnapshot.val().state : null;
+            console.log(
+                `[server.js/checkUserAndGame] User exists: ${userExists}, Game exists: ${gameExists}, Game state: ${gameState}`,
+            );
+            res.json({ userExists, gameExists, gameState });
+        })
+        .catch((error) => {
+            console.error(
+                `[server.js/checkUserAndGame] Error checking user and game: ${error}`,
+            );
+            res.status(500).json({ error: "Error checking user and game" });
+        });
+});
+
 app.get("/initUser/:userId", async (req, res) => {
-  const userId = req.params.userId;
-  console.log(`[server.js/initUser] Initializing user: ${userId}`);
+    const userId = req.params.userId;
+    console.log(`[server.js/initUser] Initializing user: ${userId}`);
 
-  try {
-    const userRef = admin.database().ref(`Users/${userId}`);
-    const snapshot = await userRef.once('value');
+    try {
+        const userRef = admin.database().ref(`Users/${userId}`);
+        const snapshot = await userRef.once("value");
 
-    if (!snapshot.exists()) {
-      const rankings = await admin.database().ref('rankings').once('value');
-      const userRankings = rankings.val() || [];
+        if (!snapshot.exists()) {
+            const rankings = await admin
+                .database()
+                .ref("rankings")
+                .once("value");
+            const userRankings = rankings.val() || [];
 
-      await userRef.set({
-        userId: userId,
-        rankings: userRankings
-      });
-      console.log(`[server.js/initUser] Created new user: ${userId}`);
-    } else {
-      console.log(`[server.js/initUser] User already exists: ${userId}`);
+            await userRef.set({
+                userId: userId,
+                rankings: userRankings,
+            });
+            console.log(`[server.js/initUser] Created new user: ${userId}`);
+        } else {
+            console.log(`[server.js/initUser] User already exists: ${userId}`);
+        }
+
+        res.json({ success: true });
+    } catch (error) {
+        console.error(`[server.js/initUser] Error initializing user: ${error}`);
+        res.status(500).json({ success: false, error: error.message });
     }
-
-    res.json({ success: true });
-  } catch (error) {
-    console.error(`[server.js/initUser] Error initializing user: ${error}`);
-    res.status(500).json({ success: false, error: error.message });
-  }
 });
 
 // Endpoint to check if a user exists in Firebase
 app.get("/checkUser/:userId", (req, res) => {
     const userId = req.params.userId;
-    console.log(`[server.js/checkUser] Checking if user exists in Firebase: ${userId}`);
+    console.log(
+        `[server.js/checkUser] Checking if user exists in Firebase: ${userId}`,
+    );
 
-    admin.database().ref(`Users/${userId}`).once("value")
+    admin
+        .database()
+        .ref(`Users/${userId}`)
+        .once("value")
         .then((snapshot) => {
             const exists = snapshot.exists();
-            console.log(`[server.js/checkUser] User ${userId} exists: ${exists}`);
+            console.log(
+                `[server.js/checkUser] User ${userId} exists: ${exists}`,
+            );
             res.json({ exists });
         })
         .catch((error) => {
-            console.error(`[server.js/checkUser] Error checking user in Firebase: ${error}`);
+            console.error(
+                `[server.js/checkUser] Error checking user in Firebase: ${error}`,
+            );
             res.status(500).json({ error: "Error checking user" });
         });
 });
 
 app.get("/getRankings", (req, res) => {
     console.log("[server.js/getRankings] Fetching rankings");
-    admin.database().ref('rankings').once('value')
+    admin
+        .database()
+        .ref("rankings")
+        .once("value")
         .then((snapshot) => {
             const rankings = snapshot.val() || [];
             res.json({ rankings });
         })
         .catch((error) => {
-            console.error("[server.js/getRankings] Error fetching rankings:", error);
+            console.error(
+                "[server.js/getRankings] Error fetching rankings:",
+                error,
+            );
             res.status(500).json({ error: "Error fetching rankings" });
         });
 });
@@ -190,17 +241,23 @@ app.post("/writeUser", (req, res) => {
     const { userId, rankings } = req.body;
     console.log(`[server.js/writeUser] Writing user to Firebase: ${userId}`);
 
-    admin.database().ref(`Users/${userId}`).set({ userId, rankings })
+    admin
+        .database()
+        .ref(`Users/${userId}`)
+        .set({ userId, rankings })
         .then(() => {
-            console.log(`[server.js/writeUser] Successfully wrote user to Firebase: ${userId}`);
+            console.log(
+                `[server.js/writeUser] Successfully wrote user to Firebase: ${userId}`,
+            );
             res.status(200).send("User written to Firebase");
         })
         .catch((error) => {
-            console.error(`[server.js/writeUser] Error writing user to Firebase: ${error}`);
+            console.error(
+                `[server.js/writeUser] Error writing user to Firebase: ${error}`,
+            );
             res.status(500).send("Error writing user to Firebase");
         });
 });
-
 
 // Endpoint to log button click
 app.post("/logClick", (req, res) => {
@@ -227,44 +284,28 @@ app.post("/logClick", (req, res) => {
 });
 
 app.get("/checkGameExists/:gameCode", (req, res) => {
-  const gameCode = req.params.gameCode;
-  console.log(`[server.js/checkGameExists] Checking if game exists in Firebase: ${gameCode}`);
+    const gameCode = req.params.gameCode;
+    console.log(
+        `[server.js/checkGameExists] Checking if game exists in Firebase: ${gameCode}`,
+    );
 
-  admin.database().ref(`games/${gameCode}`).once("value")
-    .then((snapshot) => {
-      const exists = snapshot.exists();
-      console.log(`[server.js/checkGameExists] Game ${gameCode} exists: ${exists}`);
-      res.json({ exists });
-    })
-    .catch((error) => {
-      console.error(`[server.js/checkGameExists] Error checking game in Firebase: ${error}`);
-      res.status(500).json({ error: "Error checking game" });
-    });
-});
-
-
-
-app.get("/checkUserAndGame/:userId/:gameCode", (req, res) => {
-  const userId = req.params.userId;
-  const gameCode = req.params.gameCode;
-  console.log(`[server.js/checkUserAndGame] Checking user ${userId} and game ${gameCode}`);
-
-  const db = admin.database();
-  const userRef = db.ref(`Users/${userId}`);
-  const gameRef = db.ref(`games/${gameCode}`);
-
-  Promise.all([userRef.once("value"), gameRef.once("value")])
-    .then(([userSnapshot, gameSnapshot]) => {
-      const userExists = userSnapshot.exists();
-      const gameExists = gameSnapshot.exists();
-      const gameState = gameExists ? gameSnapshot.val().state : null;
-      console.log(`[server.js/checkUserAndGame] User exists: ${userExists}, Game exists: ${gameExists}, Game state: ${gameState}`);
-      res.json({ userExists, gameExists, gameState });
-    })
-    .catch((error) => {
-      console.error(`[server.js/checkUserAndGame] Error checking user and game: ${error}`);
-      res.status(500).json({ error: "Error checking user and game" });
-    });
+    admin
+        .database()
+        .ref(`games/${gameCode}`)
+        .once("value")
+        .then((snapshot) => {
+            const exists = snapshot.exists();
+            console.log(
+                `[server.js/checkGameExists] Game ${gameCode} exists: ${exists}`,
+            );
+            res.json({ exists });
+        })
+        .catch((error) => {
+            console.error(
+                `[server.js/checkGameExists] Error checking game in Firebase: ${error}`,
+            );
+            res.status(500).json({ error: "Error checking game" });
+        });
 });
 
 // Start the HTTP server and listen on the specified port
