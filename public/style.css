@@ -5,16 +5,16 @@ body {
   background-color: #4B0082;
   color: #FFFFFF;
   display: flex;
-  flex-direction: column;
-  align-items: center;
   justify-content: center;
+  align-items: flex-start; /* Top align the main content */
   min-height: 100vh;
   margin: 0;
   text-align: center;
-  font-size: 18px; /* Increased base font size */
+  padding: 20px; /* Add padding for better spacing on mobile devices */
+  box-sizing: border-box; /* Ensure padding is included in the element's total width and height */
 }
 
-#start, #createGame, #joinGame, #waitingRoom, #game, #result {
+#start, #createGame, #joinGame, #waitingRoom, #game, #result, #waitingForVotes {
   display: none;
   flex-direction: column;
   align-items: center;
@@ -23,8 +23,10 @@ body {
   background-color: #6A0DAD;
   border-radius: 10px;
   box-shadow: 0 0 10px rgba(0, 0, 0, 0.5);
-  width: 90%;
-  max-width: 600px;
+  width: 100%; /* Full width on mobile */
+  max-width: 600px; /* Max width for larger screens */
+  margin-bottom: 20px; /* Space between sections */
+  box-sizing: border-box; /* Include padding and border in the element's total width and height */
 }
 
 #start {
@@ -99,6 +101,8 @@ button {
   cursor: pointer;
   transition: background-color 0.3s;
   font-size: 20px; /* Increased font size */
+  width: 100%; /* Full width on mobile */
+  max-width: 300px; /* Max width for larger screens */
 }
 
 button:hover {
@@ -110,7 +114,8 @@ button.button-a {
   color: #fff;
   padding: 12px 24px;
   font-size: 22px; /* Increased font size */
-  width: 220px; /* Slightly increased width */
+  width: 100%; /* Full width on mobile */
+  max-width: 220px; /* Slightly increased width */
   border-radius: 10px;
   margin: 12px auto;
   position: relative;
@@ -144,6 +149,8 @@ button.button-a:active {
   color: #FFFFFF;
   border-radius: 5px;
   font-family: 'Varela Round', sans-serif;
+  width: 100%; /* Full width on mobile */
+  box-sizing: border-box; /* Include padding and border in the element's total width and height */
 }
 
 .nameInput::placeholder {
@@ -224,11 +231,11 @@ th {
 /* Increase font size for headings */
 h1, h2, h3 {
   font-size: 28px; /* Larger font size for headings */
-  margin-bottom: 20px;
+  margin-bottom: 10px; /* Reduced bottom margin */
 }
 
 /* Ensure all buttons are centered */
-#start button, #createGame button, #joinGame button, #waitingRoom button, #game button, #result button {
+#start button, #createGame button, #joinGame button, #waitingRoom button, #game button, #result button, #waitingForVotes button {
   display: block;
   margin: 15px auto;
 }
@@ -237,14 +244,17 @@ h1, h2, h3 {
   background-color: #FF4136;
   color: white;
   margin-top: 20px;
+  width: 100%;
+  max-width: 300px; /* Ensure the button has a maximum width */
 }
 
 #endGameButton:hover, #stopWaitingButton:hover {
   background-color: #FF725C;
 }
 
+/* Style for the subheader */
 .subheader {
   font-size: 18px; /* Slightly smaller font size */
-  margin-top: -15px; /* Adjust the spacing above the subheader */
-  margin-bottom: 30px; /* Adjust the spacing below the subheader */
+  margin-top: -10px; /* Adjust the spacing above the subheader */
+  margin-bottom: 20px; /* Adjust the spacing below the subheader */
 }

@@ -133,32 +133,26 @@ io.on("connection", (socket) => {
 });
 
 app.get("/checkUserAndGame/:userId/:gameCode", (req, res) => {
-    const userId = req.params.userId;
-    const gameCode = req.params.gameCode;
-    console.log(
-        `[server.js/checkUserAndGame] Checking user ${userId} and game ${gameCode}`,
-    );
+  const userId = req.params.userId;
+  const gameCode = req.params.gameCode;
+  console.log(`[server.js/checkUserAndGame] Checking user ${userId} and game ${gameCode}`);
 
-    const db = admin.database();
-    const userRef = db.ref(`Users/${userId}`);
-    const gameRef = db.ref(`games/${gameCode}`);
+  const db = admin.database();
+  const userRef = db.ref(`Users/${userId}`);
+  const gameRef = db.ref(`games/${gameCode}`);
 
-    Promise.all([userRef.once("value"), gameRef.once("value")])
-        .then(([userSnapshot, gameSnapshot]) => {
-            const userExists = userSnapshot.exists();
-            const gameExists = gameSnapshot.exists();
-            const gameState = gameExists ? gameSnapshot.val().state : null;
-            console.log(
-                `[server.js/checkUserAndGame] User exists: ${userExists}, Game exists: ${gameExists}, Game state: ${gameState}`,
-            );
-            res.json({ userExists, gameExists, gameState });
-        })
-        .catch((error) => {
-            console.error(
-                `[server.js/checkUserAndGame] Error checking user and game: ${error}`,
-            );
-            res.status(500).json({ error: "Error checking user and game" });
-        });
+  Promise.all([userRef.once("value"), gameRef.once("value")])
+    .then(([userSnapshot, gameSnapshot]) => {
+      const userExists = userSnapshot.exists();
+      const gameExists = gameSnapshot.exists();
+      const gameState = gameExists ? gameSnapshot.val().state : null;
+      console.log(`[server.js/checkUserAndGame] User exists: ${userExists}, Game exists: ${gameExists}, Game state: ${gameState}`);
+      res.json({ userExists, gameExists, gameState });
+    })
+    .catch((error) => {
+      console.error(`[server.js/checkUserAndGame] Error checking user and game: ${error}`);
+      res.status(500).json({ error: "Error checking user and game" });
+    });
 });
 
 app.get("/initUser/:userId", async (req, res) => {

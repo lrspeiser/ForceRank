@@ -48,6 +48,7 @@ function handleStartGame(socket, io) {
                                 names: gameData.names,
                                 rankingTerm,
                                 playersCount: gameData.playersCount,
+                                creator: gameData.creator,
                             });
                         })
                         .catch((error) => {
@@ -80,6 +81,8 @@ function handleRejoinGame(socket, io) {
                 return;
             }
 
+            const actualIsCreator = gameData.creator === userId;
+
             socket.join(gameCode);
 
             switch (gameData.state) {
@@ -97,10 +100,10 @@ function handleRejoinGame(socket, io) {
                         names: gameData.names,
                         rankingTerm: gameData.rankingTerm,
                         playersCount: gameData.playersCount,
+                        creator: gameData.creator,
                     });
                     break;
                 case "completed":
-                    // Calculate final results
                     const { groupRanking, playerVotes } = calculateFinalResults(
                         gameData.rankings,
                         gameData.creator,
@@ -109,6 +112,8 @@ function handleRejoinGame(socket, io) {
                         groupRanking,
                         playerVotes,
                         rankingTerm: gameData.rankingTerm,
+                        creator: gameData.creator,
+                        isCreator: actualIsCreator,
                     });
                     break;
             }
@@ -197,6 +202,7 @@ function handleLockRankings(socket, io) {
                     io.to(gameCode).emit("updateLockCount", {
                         lockedCount: game.completed,
                         playersCount: game.playersCount,
+                        creator: game.creator,
                     });
                     console.log(
                         `[gameplay.js/lockRankings] Emitted updateLockCount for game ${gameCode}`,
@@ -332,6 +338,7 @@ function handleSubmitRankings(socket, io) {
                             io.to(gameCode).emit("updateLockCount", {
                                 lockedCount: compSnap.val(),
                                 playersCount: playerCount,
+                                creator: gameData.creator,
                             });
                             console.log(
                                 `[gameplay.js/submitRankings] Emitted 'updateLockCount' event to room ${gameCode} with lock count: ${compSnap.val()}/${playerCount}`,
@@ -346,13 +353,15 @@ function handleSubmitRankings(socket, io) {
 // This function handles moving to the next ranking round
 function handleNextRanking(socket, io) {
     socket.on("nextRanking", ({ gameCode, userId }) => {
-        console.log(`[gameplay.js/handleNextRanking] Moving to next ranking for game code: ${gameCode}`);
+        console.log(
+            `[gameplay.js/handleNextRanking] Moving to next ranking for game code: ${gameCode}`,
+        );
 
         const db = admin.database();
         const gameRef = db.ref(`games/${gameCode}`);
         const userRef = db.ref(`Users/${userId}`);
 
-        Promise.all([gameRef.once('value'), userRef.once('value')])
+        Promise.all([gameRef.once("value"), userRef.once("value")])
             .then(([gameSnapshot, userSnapshot]) => {
                 const game = gameSnapshot.val();
                 const user = userSnapshot.val();
@@ -364,7 +373,8 @@ function handleNextRanking(socket, io) {
                     game.rankings = {};
 
                     const userRankings = user.rankings || [];
-                    game.rankingTerm = userRankings[game.version % userRankings.length];
+                    game.rankingTerm =
+                        userRankings[game.version % userRankings.length];
 
                     Object.keys(game.players).forEach((playerId) => {
                         game.players[playerId].state = "Voting";
@@ -375,14 +385,20 @@ function handleNextRanking(socket, io) {
                             names: game.names,
                             rankingTerm: game.rankingTerm,
                         });
-                        console.log(`[gameplay.js/handleNextRanking] Emitted startNewRound for game ${gameCode} with term ${game.rankingTerm}`);
+                        console.log(
+                            `[gameplay.js/handleNextRanking] Emitted startNewRound for game ${gameCode} with term ${game.rankingTerm}`,
+                        );
                     });
                 } else {
-                    console.error(`[gameplay.js/handleNextRanking] Game or user not found for gameCode: ${gameCode}, userId: ${userId}`);
+                    console.error(
+                        `[gameplay.js/handleNextRanking] Game or user not found for gameCode: ${gameCode}, userId: ${userId}`,
+                    );
                 }
             })
             .catch((error) => {
-                console.error(`[gameplay.js/handleNextRanking] Error updating game: ${error}`);
+                console.error(
+                    `[gameplay.js/handleNextRanking] Error updating game: ${error}`,
+                );
             });
     });
 }
@@ -390,7 +406,9 @@ function handleNextRanking(socket, io) {
 // This function handles ending the game
 function handleEndGame(socket, io) {
     socket.on("endGame", ({ gameCode, userId }) => {
-        console.log(`[gameplay.js/handleEndGame] Ending game: ${gameCode}, User ID: ${userId}`);
+        console.log(
+            `[gameplay.js/handleEndGame] Ending game: ${gameCode}, User ID: ${userId}`,
+        );
 
         const db = admin.database();
         const gameRef = db.ref(`games/${gameCode}`);
@@ -398,14 +416,23 @@ function handleEndGame(socket, io) {
         gameRef.once("value").then((snapshot) => {
             const gameData = snapshot.val();
             if (gameData && gameData.creator === userId) {
-                gameRef.remove().then(() => {
-                    io.to(gameCode).emit("gameEnded");
-                    console.log(`[gameplay.js/handleEndGame] Game ${gameCode} ended and removed from database`);
-                }).catch((error) => {
-                    console.error(`[gameplay.js/handleEndGame] Error removing game from database: ${error}`);
-                });
+                gameRef
+                    .remove()
+                    .then(() => {
+                        io.to(gameCode).emit("gameEnded");
+                        console.log(
+                            `[gameplay.js/handleEndGame] Game ${gameCode} ended and removed from database`,
+                        );
+                    })
+                    .catch((error) => {
+                        console.error(
+                            `[gameplay.js/handleEndGame] Error removing game from database: ${error}`,
+                        );
+                    });
             } else {
-                console.log(`[gameplay.js/handleEndGame] User ${userId} is not the creator of game ${gameCode}`);
+                console.log(
+                    `[gameplay.js/handleEndGame] User ${userId} is not the creator of game ${gameCode}`,
+                );
             }
         });
     });
@@ -414,7 +441,9 @@ function handleEndGame(socket, io) {
 // This function handles stopping the waiting for votes
 function handleStopWaiting(socket, io) {
     socket.on("stopWaiting", ({ gameCode, userId }) => {
-        console.log(`[gameplay.js/handleStopWaiting] Stopping wait for game: ${gameCode}, User ID: ${userId}`);
+        console.log(
+            `[gameplay.js/handleStopWaiting] Stopping wait for game: ${gameCode}, User ID: ${userId}`,
+        );
 
         const db = admin.database();
         const gameRef = db.ref(`games/${gameCode}`);
@@ -422,21 +451,29 @@ function handleStopWaiting(socket, io) {
         gameRef.once("value").then((snapshot) => {
             const gameData = snapshot.val();
             if (gameData && gameData.creator === userId) {
-                const { groupRanking, playerVotes } = calculateFinalResults(gameData.rankings, gameData.creator);
+                const { groupRanking, playerVotes } = calculateFinalResults(
+                    gameData.rankings,
+                    gameData.creator,
+                );
                 io.to(gameCode).emit("displayFinalResults", {
                     groupRanking,
                     playerVotes,
                     rankingTerm: gameData.rankingTerm,
+                    creator: gameData.creator,
+                    isCreator: userId === gameData.creator,
                 });
                 gameRef.update({ state: "completed" });
-                console.log(`[gameplay.js/handleStopWaiting] Forced display of final results for game ${gameCode}`);
+                console.log(
+                    `[gameplay.js/handleStopWaiting] Forced display of final results for game ${gameCode}`,
+                );
             } else {
-                console.log(`[gameplay.js/handleStopWaiting] User ${userId} is not the creator of game ${gameCode}`);
+                console.log(
+                    `[gameplay.js/handleStopWaiting] User ${userId} is not the creator of game ${gameCode}`,
+                );
             }
         });
     });
 }
-
 
 module.exports = {
     handleStartGame,

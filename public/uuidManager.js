@@ -4,22 +4,33 @@
 import { v4 as uuidv4 } from "https://cdn.jsdelivr.net/npm/uuid@8.3.2/+esm";
 
 let cachedUserId = null;
+let isCreator = false;
+
 
 export async function getUserId() {
     if (cachedUserId) {
         return cachedUserId;
     }
-
     let userId = localStorage.getItem("userId");
-
     if (!userId) {
         userId = await generateNewUserId();
     }
-
     const userExists = await checkUserInFirebase(userId);
-
     if (!userExists) {
         await writeUserToFirebase(userId);
+    }
+
+    // Add this block to initialize the user on the server
+    try {
+        const response = await fetch(`/initUser/${userId}`);
+        const data = await response.json();
+        if (!data.success) {
+            console.error(`[uuidManager/getUserId] Failed to initialize user: ${data.error}`);
+        } else {
+            console.log(`[uuidManager/getUserId] User initialized successfully: ${userId}`);
+        }
+    } catch (error) {
+        console.error(`[uuidManager/getUserId] Error initializing user: ${error}`);
     }
 
     cachedUserId = userId;
@@ -53,4 +64,16 @@ async function fetchRankings() {
     const response = await fetch("/getRankings");
     const data = await response.json();
     return data.rankings;
+}
+
+export function setCreatorStatus(status) {
+    isCreator = status;
+    localStorage.setItem("isCreator", status.toString());
+}
+
+export function getCreatorStatus() {
+    if (isCreator === undefined) {
+        isCreator = localStorage.getItem("isCreator") === "true";
+    }
+    return isCreator;
 }
