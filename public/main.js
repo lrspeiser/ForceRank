@@ -35,6 +35,26 @@ function logLocalStorageContents() {
   }
 }
 
+function checkAndJoinGameFromURL() {
+  const urlParams = new URLSearchParams(window.location.search);
+  const gameIdFromUrl = urlParams.get('gameid');
+
+  if (gameIdFromUrl) {
+    console.log(`[main.js/checkAndJoinGameFromURL] Game ID found in URL: ${gameIdFromUrl}`);
+    const userId = localStorage.getItem("userId");
+
+    if (userId) {
+      console.log(`[main.js/checkAndJoinGameFromURL] Attempting to join game: ${gameIdFromUrl}`);
+      socket.emit("joinGame", { gameCode: gameIdFromUrl, userId });
+    } else {
+      console.error("[main.js/checkAndJoinGameFromURL] User ID not found in localStorage");
+    }
+  } else {
+    console.log("[main.js/checkAndJoinGameFromURL] No game ID found in URL");
+  }
+}
+
+
 function updateInvitationText(gameCode, names) {
   const invitationText = `Hey player, help me Force Rank ${names.join(
     ", ",
@@ -332,27 +352,36 @@ function initializeEventListeners() {
   console.log("[main.js/initializeEventListeners] Event listeners set up");
 }
 
+let sortableInstance = null;
+
 function initializeSortableList(names) {
+  console.log("[initializeSortableList] Initializing sortable list with names:", names);
   const sortableList = document.getElementById("sortable");
   if (sortableList) {
     // Destroy existing Sortable instance if it exists
-    if (sortableList.sortable) {
-      sortableList.sortable.destroy();
+    if (sortableInstance) {
+      console.log("[initializeSortableList] Destroying existing Sortable instance");
+      sortableInstance.destroy();
     }
 
     // Reinitialize the list
     sortableList.innerHTML = names
       .map((name) => `<li class="sortable-item">${name}</li>`)
       .join("");
+    console.log("[initializeSortableList] Repopulated sortable list");
 
     // Reinitialize Sortable
-    new Sortable(sortableList, {
+    sortableInstance = new Sortable(sortableList, {
       animation: 150,
       ghostClass: "sortable-ghost",
-      touchStartThreshold: 5, // Add this line
-      delayOnTouchOnly: true, // Add this line
-      delay: 100, // Add this line
+      touchStartThreshold: 5,
+      delayOnTouchOnly: true,
+      delay: 100,
+      onStart: () => {
+        console.log("[initializeSortableList] Dragging started");
+      },
       onEnd: () => {
+        console.log("[initializeSortableList] Dragging ended");
         const updatedRankings = Array.from(sortableList.children).map(
           (li, index) => ({
             name: li.textContent,
@@ -361,6 +390,11 @@ function initializeSortableList(names) {
         );
         const gameCode = localStorage.getItem("gameCode");
         const userId = localStorage.getItem("userId");
+        console.log("[initializeSortableList] Emitting updateRankings with data:", {
+          gameCode,
+          userId,
+          rankings: updatedRankings,
+        });
         socket.emit("updateRankings", {
           gameCode,
           userId,
@@ -368,12 +402,14 @@ function initializeSortableList(names) {
         });
       },
     });
+    console.log("[initializeSortableList] New Sortable instance created");
   } else {
     console.error(
-      "[main.js/initializeSortableList] Sortable list element not found",
+      "[initializeSortableList] Sortable list element not found",
     );
   }
 }
+
 
 function reinitializeGameScreen(names, rankingTerm) {
   hideElement("waitingRoom");
@@ -742,5 +778,6 @@ document.addEventListener("DOMContentLoaded", async () => {
   const userId = await initializeUser();
   console.log(`[main.js/DOMContentLoaded] Initialized user: ${userId}`);
   initializeEventListeners();
+  checkAndJoinGameFromURL(); 
   handlePageRefresh();
 });
