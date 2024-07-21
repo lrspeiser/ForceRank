@@ -35,25 +35,52 @@ function logLocalStorageContents() {
   }
 }
 
-function checkAndJoinGameFromURL() {
+async function checkAndJoinGameFromURL() {
   const urlParams = new URLSearchParams(window.location.search);
-  const gameIdFromUrl = urlParams.get('gameid');
+  const gameIdFromUrl = urlParams.get("gameid");
 
   if (gameIdFromUrl) {
-    console.log(`[main.js/checkAndJoinGameFromURL] Game ID found in URL: ${gameIdFromUrl}`);
+    console.log(
+      `[main.js/checkAndJoinGameFromURL] Game ID found in URL: ${gameIdFromUrl}`,
+    );
     const userId = localStorage.getItem("userId");
 
     if (userId) {
-      console.log(`[main.js/checkAndJoinGameFromURL] Attempting to join game: ${gameIdFromUrl}`);
-      socket.emit("joinGame", { gameCode: gameIdFromUrl, userId });
+      console.log(
+        `[main.js/checkAndJoinGameFromURL] Checking if game ${gameIdFromUrl} exists`,
+      );
+      const gameExists = await checkGameExists(gameIdFromUrl);
+
+      if (gameExists) {
+        console.log(
+          `[main.js/checkAndJoinGameFromURL] Game ${gameIdFromUrl} exists, attempting to join`,
+        );
+        socket.emit("joinGame", { gameCode: gameIdFromUrl, userId });
+      } else {
+        console.log(
+          `[main.js/checkAndJoinGameFromURL] Game ${gameIdFromUrl} does not exist, redirecting to main page`,
+        );
+        window.history.replaceState({}, document.title, "/");
+        showElement("start");
+      }
     } else {
-      console.error("[main.js/checkAndJoinGameFromURL] User ID not found in localStorage");
+      console.error(
+        "[main.js/checkAndJoinGameFromURL] User ID not found in localStorage",
+      );
     }
   } else {
     console.log("[main.js/checkAndJoinGameFromURL] No game ID found in URL");
   }
 }
 
+socket.on("joinGameError", (error) => {
+  console.error(
+    `[main.js/socket.on('joinGameError')] Error joining game: ${error}`,
+  );
+  alert(`Error joining game: ${error}`);
+  window.history.replaceState({}, document.title, "/");
+  showElement("start");
+});
 
 function updateInvitationText(gameCode, names) {
   const invitationText = `Hey player, help me Force Rank ${names.join(
@@ -111,9 +138,11 @@ function determineCreatorStatus(creator) {
 }
 
 socket.on("clearLocalStorage", () => {
-    console.log("[main.js/socket.on('clearLocalStorage')] Clearing local storage");
-    localStorage.removeItem("gameCode");
-    setCreatorStatus(false);
+  console.log(
+    "[main.js/socket.on('clearLocalStorage')] Clearing local storage",
+  );
+  localStorage.removeItem("gameCode");
+  setCreatorStatus(false);
 });
 
 socket.on("updateLockCount", ({ lockedCount, playersCount, creator }) => {
@@ -142,12 +171,28 @@ socket.on("updateLockCount", ({ lockedCount, playersCount, creator }) => {
 
 socket.on(
   "displayFinalResults",
-  ({ groupRanking, playerVotes, rankingTerm, creator }) => {
+  ({
+    groupRanking,
+    playerVotes,
+    rankingTerm,
+    creator,
+    demoMode,
+    nextRankingTerm,
+  }) => {
     console.log(
       "[main.js/socket.on('displayFinalResults')] Displaying final results",
-      { groupRanking, playerVotes, rankingTerm, creator },
+      {
+        groupRanking,
+        playerVotes,
+        rankingTerm,
+        creator,
+        demoMode,
+        nextRankingTerm,
+      },
     );
-    hideElement("game");
+    if (!demoMode) {
+      hideElement("game");
+    }
     hideElement("waitingForVotes");
     showElement("result");
     const userId = localStorage.getItem("userId");
@@ -187,30 +232,73 @@ socket.on(
       );
     }
     updateTextContent("resultLabel", `Final Results for: Most ${rankingTerm}`);
-    // Show next button and end game button only for the creator
+
     const nextButton = document.getElementById("nextButton");
     const endGameButton = document.getElementById("endGameButton");
-    const isCreator = determineCreatorStatus(creator);
-    console.log(
-      `[main.js/socket.on('displayFinalResults')] Is creator: ${isCreator}`,
-    );
-    if (nextButton && endGameButton) {
-      nextButton.style.display = isCreator ? "block" : "none";
-      endGameButton.style.display = isCreator ? "block" : "none";
+    const backToVotingButton = document.getElementById("backToVotingButton");
+    const nextRoundButton = document.getElementById("nextRoundButton");
 
-      console.log(
-        `[main.js/socket.on('displayFinalResults')] Next button display: ${nextButton.style.display}`,
-      );
-      console.log(
-        `[main.js/socket.on('displayFinalResults')] End Game button display: ${endGameButton.style.display}`,
-      );
-    } else {
-      console.error(
-        "[main.js/socket.on('displayFinalResults')] Next button or End Game button element not found",
-      );
+    if (nextRoundButton) {
+      nextRoundButton.textContent = demoMode
+        ? `Next: ${nextRankingTerm}`
+        : "Next Round";
+      nextRoundButton.style.display = demoMode ? "block" : "none";
+
+      // Remove existing event listeners
+      nextRoundButton.replaceWith(nextRoundButton.cloneNode(true));
+
+      // Re-select the button after replacing
+      const updatedNextRoundButton = document.getElementById("nextRoundButton");
+
+      updatedNextRoundButton.addEventListener("click", () => {
+        console.log(
+          "[main.js/nextRoundButton.click] Next Round button clicked",
+        );
+        const gameCode = localStorage.getItem("gameCode");
+        const userId = localStorage.getItem("userId");
+        if (gameCode && userId) {
+          if (demoMode) {
+            console.log(
+              `[main.js/nextRoundButton.click] Starting next round for demo game: ${gameCode}, userId: ${userId}`,
+            );
+            socket.emit("startNextRound", { gameCode, userId });
+          } else {
+            console.log(
+              `[main.js/nextRoundButton.click] Requesting next round for game code: ${gameCode}, userId: ${userId}`,
+            );
+            socket.emit("nextRanking", { gameCode, userId });
+          }
+        } else {
+          console.error(
+            "[main.js/nextRoundButton.click] Game code or user ID not found in local storage",
+          );
+        }
+      });
+
+      if (nextButton && endGameButton) {
+        nextButton.style.display = isCreator ? "block" : "none";
+        endGameButton.style.display = isCreator ? "block" : "none";
+        console.log(
+          `[main.js/socket.on('displayFinalResults')] Next button display: ${nextButton.style.display}`,
+        );
+        console.log(
+          `[main.js/socket.on('displayFinalResults')] End Game button display: ${endGameButton.style.display}`,
+        );
+      } else {
+        console.error(
+          "[main.js/socket.on('displayFinalResults')] Next button or End Game button element not found",
+        );
+      }
+      // Update creator status in local storage
+      setCreatorStatus(isCreator);
     }
-    // Update creator status in local storage
-    setCreatorStatus(isCreator);
+
+    if (backToVotingButton) {
+      backToVotingButton.style.display = demoMode ? "block" : "none";
+    }
+    if (nextRoundButton) {
+      nextRoundButton.style.display = demoMode ? "block" : "none";
+    }
   },
 );
 
@@ -225,6 +313,49 @@ function initializeEventListeners() {
   const lockButton = document.getElementById("lockButton");
   const createGameDiv = document.getElementById("createGame");
   const nextButton = document.getElementById("nextButton");
+  const quitLink = document.getElementById("quitLink");
+  if (quitLink) {
+    quitLink.addEventListener("click", (event) => {
+      event.preventDefault(); // Prevent the default link behavior
+      console.log("[main.js/quitLink.click] Quit link clicked");
+      const gameCode = localStorage.getItem("gameCode");
+      const userId = localStorage.getItem("userId");
+      if (gameCode && userId) {
+        console.log(`[main.js/quitLink.click] Quitting game: ${gameCode}`);
+        socket.emit("quitGame", { gameCode, userId });
+      }
+    });
+  }
+  const demoMarvelButton = document.getElementById("demoMarvelButton");
+  if (demoMarvelButton) {
+    demoMarvelButton.addEventListener("click", () => {
+      console.log(
+        "[main.js/demoMarvelButton.click] Demo: Marvel button clicked",
+      );
+      const userId = localStorage.getItem("userId");
+      socket.emit("joinDemoMarvel", { userId });
+    });
+  }
+
+  const backToStartButton = document.getElementById("backToStartButton");
+  if (backToStartButton) {
+    backToStartButton.addEventListener("click", () => {
+      console.log(
+        "[main.js/backToStartButton.click] Back to Start button clicked",
+      );
+      localStorage.removeItem("gameCode");
+      hideElement("result");
+      showElement("start");
+    });
+  }
+
+  const backToVotingButton = document.getElementById("backToVotingButton");
+  if (backToVotingButton) {
+    backToVotingButton.addEventListener("click", () => {
+      hideElement("result");
+      showElement("game");
+    });
+  }
 
   if (nextButton) {
     nextButton.addEventListener("click", () => {
@@ -321,67 +452,141 @@ function initializeEventListeners() {
   }
 
   if (lockButton) {
-    lockButton.addEventListener("click", () => {
-      console.log("[main.js/lockButton.click] Lock button clicked");
-      const gameCode = localStorage.getItem("gameCode");
-      const userId = localStorage.getItem("userId");
-      if (!gameCode) {
-        console.error(
-          "[main.js/lockButton.click] Error: No game code found in local storage",
-        );
-        return;
-      }
-      const rankings = getRankings();
-      if (gameCode && userId) {
-        console.log(
-          `[main.js/lockButton.click] Locking rankings for game code: ${gameCode}, User ID: ${userId}`,
-        );
-        socket.emit("lockRankings", { gameCode, userId, rankings });
+      lockButton.addEventListener("click", () => {
+          console.log("[main.js/lockButton.click] Lock button clicked");
+          const gameCode = localStorage.getItem("gameCode");
+          const userId = localStorage.getItem("userId");
+          if (!gameCode) {
+              console.error("[main.js/lockButton.click] Error: No game code found in local storage");
+              return;
+          }
+          const rankings = getRankings();
+          if (gameCode && userId) {
+              console.log(`[main.js/lockButton.click] Locking rankings for game code: ${gameCode}, User ID: ${userId}`);
+              socket.emit("lockRankings", { gameCode, userId, rankings });
 
-        // Hide the game screen and show the waiting screen
-        hideElement("game");
-        showElement("waitingForVotes");
-        updateTextContent(
-          "waitingVotesText",
-          "Waiting for other players to vote...",
-        );
-      }
-    });
+              // Don't hide the game screen or show waiting screen for demo mode
+              if (gameCode !== "MARVEL_DEMO") {
+                  hideElement("game");
+                  showElement("waitingForVotes");
+                  updateTextContent("waitingVotesText", "Waiting for other players to vote...");
+              }
+          }
+      });
   }
 
   console.log("[main.js/initializeEventListeners] Event listeners set up");
 }
 
+socket.on("playerLeft", ({ gameCode, names, playersCount }) => {
+  console.log(
+    `[main.js/socket.on('playerLeft')] Player left game: ${gameCode}, Total players: ${playersCount}`,
+  );
+  updatePlayersList(names);
+  updateTextContent("playerCount", `${playersCount} (including you)`);
+});
+
+socket.on("quitGameSuccess", () => {
+  console.log(
+    "[main.js/socket.on('quitGameSuccess')] Successfully quit the game",
+  );
+  localStorage.removeItem("gameCode");
+  setCreatorStatus(false);
+  hideElement("waitingRoom");
+  hideElement("game");
+  hideElement("waitingForVotes");
+  hideElement("result");
+  showElement("start");
+});
+
+socket.on("joinedDemoMarvel", ({ gameCode, names, rankingTerm }) => {
+  console.log(
+    `[main.js/socket.on('joinedDemoMarvel')] Joined Marvel demo game: ${gameCode}`,
+  );
+  localStorage.setItem("gameCode", gameCode);
+  hideElement("start");
+  showElement("game");
+  updateTextContent("rankingLabel", `Who is the most ${rankingTerm}?`);
+  initializeSortableList(names);
+});
+
 let sortableInstance = null;
 
 function initializeSortableList(names) {
-  console.log("[initializeSortableList] Initializing sortable list with names:", names);
+  console.log(
+    "[initializeSortableList] Initializing sortable list with names:",
+    names,
+  );
+  sendLogToServer("initializeSortableList called", { names });
   const sortableList = document.getElementById("sortable");
-  if (sortableList) {
+  const rankNumbers = document.getElementById("rankNumbers");
+
+  if (sortableList && rankNumbers) {
     // Destroy existing Sortable instance if it exists
     if (sortableInstance) {
-      console.log("[initializeSortableList] Destroying existing Sortable instance");
+      console.log(
+        "[initializeSortableList] Destroying existing Sortable instance",
+      );
       sortableInstance.destroy();
     }
 
-    // Reinitialize the list
-    sortableList.innerHTML = names
-      .map((name) => `<li class="sortable-item">${name}</li>`)
-      .join("");
-    console.log("[initializeSortableList] Repopulated sortable list");
+    // Clear existing content
+    sortableList.innerHTML = "";
+    rankNumbers.innerHTML = "";
+
+    // Add rank numbers
+    names.forEach((_, index) => {
+      const rankNumber = document.createElement("div");
+      rankNumber.className = "rank-number";
+      rankNumber.textContent = index + 1;
+      rankNumbers.appendChild(rankNumber);
+    });
+
+    // Add sortable items
+    names.forEach((name) => {
+      const li = document.createElement("li");
+      li.className = "sortable-item";
+      li.textContent = name;
+      sortableList.appendChild(li);
+    });
+
+    console.log(
+      "[initializeSortableList] Repopulated sortable list and rank numbers",
+    );
+
+    // Register initial rankings
+    const initialRankings = Array.from(sortableList.children).map(
+      (li, index) => ({
+        name: li.textContent,
+        rank: index + 1,
+      }),
+    );
+    const gameCode = localStorage.getItem("gameCode");
+    const userId = localStorage.getItem("userId");
+    console.log(
+      "[initializeSortableList] Emitting initial updateRankings with data:",
+      {
+        gameCode,
+        userId,
+        rankings: initialRankings,
+      },
+    );
+    socket.emit("updateRankings", {
+      gameCode,
+      userId,
+      rankings: initialRankings,
+    });
 
     // Reinitialize Sortable
     sortableInstance = new Sortable(sortableList, {
       animation: 150,
       ghostClass: "sortable-ghost",
-      touchStartThreshold: 5,
-      delayOnTouchOnly: true,
-      delay: 100,
-      onStart: () => {
-        console.log("[initializeSortableList] Dragging started");
-      },
+      touchStartThreshold: 5, // Add this line
+      delayOnTouchOnly: true, // Add this line
+      delay: 100, // Add this line
       onEnd: () => {
         console.log("[initializeSortableList] Dragging ended");
+        sendLogToServer("Dragging ended");
         const updatedRankings = Array.from(sortableList.children).map(
           (li, index) => ({
             name: li.textContent,
@@ -390,11 +595,14 @@ function initializeSortableList(names) {
         );
         const gameCode = localStorage.getItem("gameCode");
         const userId = localStorage.getItem("userId");
-        console.log("[initializeSortableList] Emitting updateRankings with data:", {
-          gameCode,
-          userId,
-          rankings: updatedRankings,
-        });
+        console.log(
+          "[initializeSortableList] Emitting updateRankings with data:",
+          {
+            gameCode,
+            userId,
+            rankings: updatedRankings,
+          },
+        );
         socket.emit("updateRankings", {
           gameCode,
           userId,
@@ -403,13 +611,14 @@ function initializeSortableList(names) {
       },
     });
     console.log("[initializeSortableList] New Sortable instance created");
+    sendLogToServer("New Sortable instance created");
   } else {
     console.error(
-      "[initializeSortableList] Sortable list element not found",
+      "[initializeSortableList] Sortable list or rank numbers element not found",
     );
+    sendLogToServer("Error: Sortable list or rank numbers element not found");
   }
 }
-
 
 function reinitializeGameScreen(names, rankingTerm) {
   hideElement("waitingRoom");
@@ -420,29 +629,32 @@ function reinitializeGameScreen(names, rankingTerm) {
 }
 
 socket.on("gameEnded", () => {
-    console.log("[main.js/socket.on('gameEnded')] Game has ended");
-    localStorage.removeItem("gameCode");
-    setCreatorStatus(false);
-    hideElement("result");
-    hideElement("waitingForVotes");
-    hideElement("game");
-    hideElement("waitingRoom");
-    showElement("start");
+  console.log("[main.js/socket.on('gameEnded')] Game has ended");
+  localStorage.removeItem("gameCode");
+  setCreatorStatus(false);
+  hideElement("result");
+  hideElement("waitingForVotes");
+  hideElement("game");
+  hideElement("waitingRoom");
+  showElement("start");
 });
 
 socket.on("playerJoined", ({ gameCode, names, playersCount }) => {
-    console.log(
-        `[main.js/socket.on('playerJoined')] Player joined game: ${gameCode}, Total players: ${playersCount}`,
-    );
-    updatePlayersList(names);
-    updateTextContent("waitingRoomGameCode", gameCode);
-    showElement("waitingRoom");
+  console.log(
+    `[main.js/socket.on('playerJoined')] Player joined game: ${gameCode}, Total players: ${playersCount}`,
+  );
+  updatePlayersList(names);
+  updateTextContent("waitingRoomGameCode", gameCode);
+  updateTextContent("playerCount", `${playersCount} (including you)`);
+  showElement("waitingRoom");
 });
 
-socket.on("startGame", ({ gameCode, names, rankingTerm, playersCount, creator }) => {
+socket.on(
+  "startGame",
+  ({ gameCode, names, rankingTerm, playersCount, creator }) => {
     console.log(
-        `[main.js/socket.on('startGame')] Starting game for game code: ${gameCode}`,
-        { names, rankingTerm, playersCount, creator },
+      `[main.js/socket.on('startGame')] Starting game for game code: ${gameCode}`,
+      { names, rankingTerm, playersCount, creator },
     );
     localStorage.setItem("gameCode", gameCode);
     hideElement("waitingRoom");
@@ -460,10 +672,11 @@ socket.on("startGame", ({ gameCode, names, rankingTerm, playersCount, creator })
     const nextButton = document.getElementById("nextButton");
     const endGameButton = document.getElementById("endGameButton");
     if (nextButton && endGameButton) {
-        nextButton.style.display = isCreator ? "block" : "none";
-        endGameButton.style.display = isCreator ? "block" : "none";
+      nextButton.style.display = isCreator ? "block" : "none";
+      endGameButton.style.display = isCreator ? "block" : "none";
     }
-});
+  },
+);
 
 socket.on("startNewRound", ({ names, rankingTerm }) => {
   console.log(
@@ -479,6 +692,133 @@ socket.on("startNewRound", ({ names, rankingTerm }) => {
   updateTextContent("lockCount", "0 / X votes cast");
 });
 
+function copyToClipboard(text) {
+  navigator.clipboard
+    .writeText(text)
+    .then(() => {
+      console.log("Text copied to clipboard");
+    })
+    .catch((err) => {
+      console.error("Error in copying text: ", err);
+    });
+}
+
+function initializeCopyButtons() {
+  const copyGameCodeButton = document.getElementById("copyGameCodeButton");
+  const copyInvitationButton = document.getElementById("copyInvitationButton");
+
+  if (copyGameCodeButton) {
+    copyGameCodeButton.addEventListener("click", () => {
+      const gameCode = document.getElementById(
+        "waitingRoomGameCode",
+      ).textContent;
+      copyToClipboard(gameCode);
+    });
+  }
+
+  if (copyInvitationButton) {
+    copyInvitationButton.addEventListener("click", () => {
+      const invitationText = document.getElementById("invitationText").value;
+      copyToClipboard(invitationText);
+    });
+  }
+}
+
+socket.on(
+  "displayDemoResults",
+  ({
+    currentRankingResults,
+    playerVotes,
+    rankingTerm,
+    nextRankingTerm,
+    isLastRanking,
+  }) => {
+    console.log(
+      "[main.js/socket.on('displayDemoResults')] Displaying demo results",
+      { currentRankingResults, rankingTerm, nextRankingTerm, isLastRanking },
+    );
+
+    hideElement("game");
+    hideElement("waitingForVotes");
+    showElement("result");
+
+    const resultTable = document.getElementById("resultTable");
+    if (resultTable) {
+      const userId = localStorage.getItem("userId");
+      resultTable.innerHTML = `
+            <tr>
+                <th>Rank</th>
+                <th>Character</th>
+                <th>Average Score</th>
+                <th>Your Vote</th>
+            </tr>
+            ${currentRankingResults
+              .map(({ name, score }, index) => {
+                const userVote =
+                  playerVotes[userId]?.find((v) => v.name === name)?.rank ||
+                  "N/A";
+                return `
+                  <tr>
+                      <td>${index + 1}</td>
+                      <td>${name}</td>
+                      <td>${score.toFixed(2)}</td>
+                      <td>${userVote}</td>
+                  </tr>
+                `;
+              })
+              .join("")}
+        `;
+    }
+
+    updateTextContent("resultLabel", `Results for: Most ${rankingTerm}`);
+
+    const nextButton = document.getElementById("nextButton");
+    if (nextButton) {
+      if (isLastRanking) {
+        nextButton.textContent = "See Final Results";
+      } else {
+        nextButton.textContent = `Next: ${nextRankingTerm}`;
+      }
+      nextButton.style.display = "block";
+
+      // Remove existing event listeners
+      nextButton.replaceWith(nextButton.cloneNode(true));
+
+      // Re-select the button after replacing
+      const updatedNextButton = document.getElementById("nextButton");
+
+      updatedNextButton.addEventListener("click", () => {
+        console.log("[main.js/nextButton.click] Next button clicked in demo game");
+        const gameCode = localStorage.getItem("gameCode");
+        const userId = localStorage.getItem("userId");
+        if (gameCode && userId) {
+          if (isLastRanking) {
+            console.log("[main.js/nextButton.click] Requesting final demo results");
+            socket.emit("getFinalDemoResults", { gameCode, userId });
+          } else {
+            console.log("[main.js/nextButton.click] Starting next round for demo game");
+            socket.emit("startNextRound", { gameCode, userId });
+          }
+        } else {
+          console.error("[main.js/nextButton.click] Game code or user ID not found in local storage");
+        }
+      });
+    }
+
+    hideElement("backToVotingButton");
+  },
+);
+
+
+
+
+
+// Call this function after the DOM is loaded
+document.addEventListener("DOMContentLoaded", initializeCopyButtons);
+
+
+
+
 socket.on("gameJoined", ({ gameCode, names, playersCount }) => {
   console.log(
     `[main.js/socket.on('gameJoined')] Game joined: ${gameCode}, Players: ${playersCount}`,
@@ -488,6 +828,7 @@ socket.on("gameJoined", ({ gameCode, names, playersCount }) => {
   showElement("waitingRoom");
   updateTextContent("waitingRoomGameCode", gameCode);
   updatePlayersList(names);
+  updateTextContent("playerCount", `${playersCount} (including you)`);
   updateInvitationText(gameCode, names);
   console.log(
     `[main.js/socket.on('gameJoined')] Updated waiting room with game code and player list`,
@@ -508,9 +849,11 @@ socket.on("refreshRanking", ({ names, rankingTerm }) => {
   updateTextContent("lockCount", "0 / X votes cast");
 });
 
-socket.on("joinedWaitingRoom", ({ gameCode, names, playersCount, isCreator }) => {
+socket.on(
+  "joinedWaitingRoom",
+  ({ gameCode, names, playersCount, isCreator }) => {
     console.log(
-        `[main.js/socket.on('joinedWaitingRoom')] Joined waiting room for game: ${gameCode}`,
+      `[main.js/socket.on('joinedWaitingRoom')] Joined waiting room for game: ${gameCode}`,
     );
     localStorage.setItem("gameCode", gameCode);
     hideElement("start");
@@ -525,11 +868,14 @@ socket.on("joinedWaitingRoom", ({ gameCode, names, playersCount, isCreator }) =>
 
     const startGameButton = document.getElementById("startGameButton");
     if (startGameButton) {
-        startGameButton.style.display = isCreator ? "block" : "none";
+      startGameButton.style.display = isCreator ? "block" : "none";
     }
 
-    console.log(`[main.js/socket.on('joinedWaitingRoom')] Updated waiting room. Is creator: ${isCreator}`);
-});
+    console.log(
+      `[main.js/socket.on('joinedWaitingRoom')] Updated waiting room. Is creator: ${isCreator}`,
+    );
+  },
+);
 
 socket.on("rejoinVoting", ({ gameCode, names, rankingTerm, playersCount }) => {
   console.log(
@@ -732,52 +1078,106 @@ async function checkGameExists(gameCode) {
 }
 
 socket.on(
-    "gameExists",
-    ({
-        exists,
-        userExists,
-        gameCode,
-        userId,
-        state,
-        names,
-        playersCount,
-        rankingCriteria,
-    }) => {
+  "gameExists",
+  ({
+    exists,
+    userExists,
+    gameCode,
+    userId,
+    state,
+    names,
+    playersCount,
+    rankingCriteria,
+  }) => {
+    console.log(
+      `[main.js/socket.on('gameExists')] Game exists: ${exists}, User exists: ${userExists}, Game state: ${state}`,
+    );
+    if (exists && userExists) {
+      if (state === "waiting") {
         console.log(
-            `[main.js/socket.on('gameExists')] Game exists: ${exists}, User exists: ${userExists}, Game state: ${state}`,
+          `[main.js/socket.on('gameExists')] Rejoining waiting room for game: ${gameCode}`,
         );
-        if (exists && userExists) {
-            if (state === "waiting") {
-                console.log(
-                    `[main.js/socket.on('gameExists')] Rejoining waiting room for game: ${gameCode}`,
-                );
-                hideElement("start");
-                showElement("waitingRoom");
-                updateTextContent("waitingRoomGameCode", gameCode);
-                updatePlayersList(names, playersCount);
-            } else if (state === "voting") {
-                console.log(
-                    `[main.js/socket.on('gameExists')] Rejoining active game: ${gameCode}`,
-                );
-                socket.emit("rejoinGame", { gameCode, userId });
-            }
-        } else {
-            console.log(
-                "[main.js/socket.on('gameExists')] No active game found. Showing start screen.",
-            );
-            showElement("start");
-        }
-    },
+        hideElement("start");
+        showElement("waitingRoom");
+        updateTextContent("waitingRoomGameCode", gameCode);
+        updatePlayersList(names, playersCount);
+      } else if (state === "voting") {
+        console.log(
+          `[main.js/socket.on('gameExists')] Rejoining active game: ${gameCode}`,
+        );
+        socket.emit("rejoinGame", { gameCode, userId });
+      }
+    } else {
+      console.log(
+        "[main.js/socket.on('gameExists')] No active game found. Showing start screen.",
+      );
+      showElement("start");
+    }
+  },
 );
 
+socket.on("displayFinalDemoResults", ({ finalResults, allRankings }) => {
+  console.log(
+    "[main.js/socket.on('displayFinalDemoResults')] Displaying final demo results",
+    { finalResults, allRankings },
+  );
 
+  const resultTable = document.getElementById("resultTable");
+  if (resultTable) {
+    resultTable.innerHTML = `
+            <tr>
+                <th>Rank</th>
+                <th>Character</th>
+                <th>Overall Score</th>
+            </tr>
+            ${finalResults
+              .map(
+                ({ name, totalScore }, index) => `
+                <tr>
+                    <td>${index + 1}</td>
+                    <td>${name}</td>
+                    <td>${totalScore.toFixed(2)}</td>
+                </tr>
+            `,
+              )
+              .join("")}
+        `;
+  }
+
+  updateTextContent("resultLabel", `Final Results: Overall Ranking`);
+
+  hideElement("nextButton");
+  showElement("backToStartButton");
+});
+
+function sendLogToServer(message, data = {}) {
+  const logData = {
+    message,
+    data,
+    timestamp: new Date().toISOString(),
+    userId: localStorage.getItem("userId"),
+    gameCode: localStorage.getItem("gameCode"),
+    url: window.location.href,
+    userAgent: navigator.userAgent,
+  };
+
+  fetch("/clientLog", {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify(logData),
+  }).catch((error) => console.error("Error sending log to server:", error));
+}
 
 document.addEventListener("DOMContentLoaded", async () => {
   console.log("[main.js/DOMContentLoaded] Document is ready");
+  sendLogToServer("DOMContentLoaded event fired");
   logLocalStorageContents();
   const userId = await initializeUser();
   console.log(`[main.js/DOMContentLoaded] Initialized user: ${userId}`);
+  sendLogToServer("User initialized", { userId });
   initializeEventListeners();
-  checkAndJoinGameFromURL(); 
+  checkAndJoinGameFromURL();
   handlePageRefresh();
 });

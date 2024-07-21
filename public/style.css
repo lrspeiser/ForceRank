@@ -90,6 +90,48 @@ body {
   box-sizing: border-box; /* Include padding and border in the element's total width and height */
 }
 
+.copy-button {
+  background-color: #db87f2;
+  color: white;
+  border: none;
+  padding: 2px 5px;
+  font-size: 12px;
+  cursor: pointer;
+  border-radius: 3px;
+  margin-left: 5px;
+  vertical-align: middle;
+  line-height: 1;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 40px;
+  height: 20px;
+  width: auto; /* Allow the button to size based on content */
+  max-width: none; /* Remove max-width constraint */
+}
+
+.copy-button:hover {
+  background-color: #d8c5e2;
+}
+
+.invitation-container {
+  position: relative;
+  width: 100%;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+}
+
+#invitationText {
+  width: 100%;
+  margin-bottom: 10px; /* Add some space below the textarea */
+}
+
+#copyInvitationButton {
+  position: static; /* Remove absolute positioning */
+  margin-top: 5px; /* Add some space above the button */
+}
+
 button {
   background-color: #FFD700;
   color: #4B0082;
@@ -257,4 +299,45 @@ h1, h2, h3 {
   font-size: 18px; /* Slightly smaller font size */
   margin-top: -10px; /* Adjust the spacing above the subheader */
   margin-bottom: 20px; /* Adjust the spacing below the subheader */
+}
+
+#quitLink {
+  color: #FFD700;
+  text-decoration: none;
+  font-size: 14px;
+  opacity: 0.7;
+  transition: opacity 0.3s;
+}
+
+#quitLink:hover {
+  opacity: 1;
+}
+
+.large-input,
+#gameCodeInput {
+    width: 100%;
+    max-width: 300px;
+    padding: 15px;
+    font-size: 24px;
+    text-align: center;
+    margin: 20px auto;
+    border: 2px solid #FFD700;
+    background-color: #6A0DAD;
+    color: #FFFFFF;
+    border-radius: 5px;
+    font-family: 'Varela Round', sans-serif;
+    box-sizing: border-box;
+}
+
+.large-input::placeholder,
+#gameCodeInput::placeholder {
+    color: #CCCCCC;
+    opacity: 0.7;
+}
+
+.large-input:focus,
+#gameCodeInput:focus {
+    outline: none;
+    border-color: #FFDF00;
+    box-shadow: 0 0 10px rgba(255, 215, 0, 0.5);
 }

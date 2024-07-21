@@ -90,7 +90,13 @@ function handleJoinGame(socket, io) {
         const gameRef = db.ref(`games/${gameCode}`);
 
         gameRef.once("value").then((snapshot) => {
-            const gameData = snapshot.val() || {};
+            const gameData = snapshot.val();
+
+            if (!gameData) {
+                console.log(`[validation.js/handleJoinGame] Game ${gameCode} not found`);
+                socket.emit("joinGameError", "Game not found");
+                return;
+            }
 
             if (!gameData.players || !gameData.players[userId]) {
                 const newPlayersCount = (gameData.playersCount || 0) + 1;
@@ -129,6 +135,7 @@ function handleJoinGame(socket, io) {
         });
     });
 }
+
 
 function handleGameExists(socket, io) {
     socket.on("checkGameExists", ({ gameCode, userId }) => {

@@ -68,6 +68,9 @@ const {
     handleLockRankings,
     handleEndGame,
     handleStopWaiting,
+    handleQuitGame,
+    handleJoinDemoMarvel,
+    handleStartNextRound,
 } = require("./gameplay"); // Import from gameplay.js
 
 function initializeUserTerms(userId) {
@@ -123,6 +126,9 @@ io.on("connection", (socket) => {
     handleLockRankings(socket, io); // Attach the lock rankings handler
     handleEndGame(socket, io);
     handleStopWaiting(socket, io);
+    handleQuitGame(socket, io); 
+    handleJoinDemoMarvel(socket, io);
+
 
     // Set up a disconnect event listener for socket.io
     console.log("[server.js] Setting up socket.io disconnect event listener");
@@ -131,6 +137,15 @@ io.on("connection", (socket) => {
         console.log("[server.js/io.on(disconnect)] A user disconnected");
     });
 });
+
+app.post('/clientLog', (req, res) => {
+    const logData = req.body;
+    console.log('Client log received:', JSON.stringify(logData));
+    // You might want to store these logs in a database or a file for later analysis
+    res.sendStatus(200);
+});
+
+
 
 app.get("/checkUserAndGame/:userId/:gameCode", (req, res) => {
   const userId = req.params.userId;
